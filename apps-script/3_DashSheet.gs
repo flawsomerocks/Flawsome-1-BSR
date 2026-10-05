@@ -18,6 +18,11 @@ function buildDash_(d) {
     '"Custom",$E$3,$E$5),"")');
   d.getRange('B6').setFormula('=IFERROR(SWITCH($B$3,"Last Month",EOMONTH($E$5,-1),"Custom",$E$4,$E$5),"")');
 
+  d.getRange('G3:G4').setValues([['Prev Start'], ['Prev End']]).setFontWeight('bold');
+  d.getRange('H3').setFormula('=IFERROR($B$5-($B$6-$B$5+1),"")');
+  d.getRange('H4').setFormula('=IFERROR($B$5-1,"")');
+  d.getRange('H3:H4').setNumberFormat('dd-mmm-yyyy').setHorizontalAlignment('left');
+
   d.getRange('Z1').setFormula('={"All";IFERROR(SORT(UNIQUE(FILTER(Data!B2:B,Data!B2:B<>""))),"")}');
   d.hideColumns(26);
   d.getRange('B3').setDataValidation(SpreadsheetApp.newDataValidation()

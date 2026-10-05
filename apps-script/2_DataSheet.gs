@@ -18,6 +18,13 @@ function buildData_(data, col) {
     '=IFERROR(FILTER({A2:A,B2:B,C2:C,D2:D,E2:E},' +
     'A2:A<>"",A2:A>=Dashboard!$B$5,A2:A<=Dashboard!$B$6,' +
     '(Dashboard!$B$4="All")+(B2:B=Dashboard!$B$4)>0),"")');
+  // previous period (same length, just before the selected one)
+  data.getRange('M1:Q1').setValues([['P Date', 'P Portal', 'P SKU', 'P Qty', 'P Revenue']]);
+  data.getRange('M2').setFormula(
+    '=IFERROR(FILTER({A2:A,B2:B,C2:C,D2:D,E2:E},' +
+    'A2:A<>"",A2:A>=Dashboard!$H$3,A2:A<=Dashboard!$H$4,' +
+    '(Dashboard!$B$4="All")+(B2:B=Dashboard!$B$4)>0),"")');
+  data.getRange('M2:M').setNumberFormat('dd-mmm-yyyy');
   data.getRange('A2:A').setNumberFormat('dd-mmm-yyyy');
   data.getRange('G2:G').setNumberFormat('dd-mmm-yyyy');
   data.hideSheet();

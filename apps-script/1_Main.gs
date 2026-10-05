@@ -1,6 +1,6 @@
 /** FLAWSOME SALES DASHBOARD - file 1 of 4 (Main). Run setupDashboard() once. */
 const CFG = {
-  SOURCE: 'Compile', DASH: 'Dashboard', DATA: 'Data', HEADER_ROW: 1,
+  SOURCE: 'Compile', DASH: 'Dashboard', DATA: 'Data', SKU: 'SKU Drop', HEADER_ROW: 1,
   HEADERS: {
     date: ['date'],
     portal: ['portal'],
@@ -20,7 +20,7 @@ function setupDashboard() {
   const src = ss.getSheetByName(CFG.SOURCE);
   if (!src) throw new Error('"' + CFG.SOURCE + '" naam ki sheet nahi mili.');
   const col = findColumns_(src);
-  [CFG.DASH, CFG.DATA].forEach(n => {
+  [CFG.DASH, CFG.DATA, CFG.SKU].forEach(n => {
     const old = ss.getSheetByName(n);
     if (old) ss.deleteSheet(old);
   });
@@ -29,6 +29,10 @@ function setupDashboard() {
   buildData_(data, col);
   buildDash_(d);
   buildCharts_(d);
+  const sku = ss.insertSheet(CFG.SKU);
+  buildSku_(sku);
+  ss.setActiveSheet(sku);
+  ss.moveActiveSheet(1);
   d.setActiveSelection('B3');
   ss.setActiveSheet(d);
   ss.moveActiveSheet(1);
