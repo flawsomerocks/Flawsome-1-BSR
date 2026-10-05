@@ -29,10 +29,6 @@ function setupDashboard() {
   buildData_(data, col);
   buildDash_(d);
   buildCharts_(d);
-  const sku = ss.insertSheet(CFG.SKU);
-  buildSku_(sku);
-  ss.setActiveSheet(sku);
-  ss.moveActiveSheet(1);
   d.setActiveSelection('B3');
   ss.setActiveSheet(d);
   ss.moveActiveSheet(1);

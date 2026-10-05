@@ -8,7 +8,7 @@ function buildCharts_(d) {
     .setOption('width', 520).setOption('height', h)
     .setPosition(row, 13, 0, 0).build());
 
-  add(Charts.ChartType.COLUMN, 'E12:E131', 'G12:G131', 'Daily Revenue', 3, 260);
+  add(Charts.ChartType.COLUMN, 'M52:M171', 'O52:O171', 'Daily Revenue', 3, 260);
   add(Charts.ChartType.PIE, 'A12:A31', 'C12:C31', 'Portal-wise Revenue', 17, 280);
-  add(Charts.ChartType.BAR, 'I12:I22', 'K12:K22', 'Top 10 SKU (Revenue)', 33, 300);
+  add(Charts.ChartType.BAR, 'E12:E22', 'G12:G22', 'Top 10 SKU (Revenue)', 33, 300);
 }

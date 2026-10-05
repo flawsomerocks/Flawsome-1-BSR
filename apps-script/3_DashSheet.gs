@@ -52,18 +52,21 @@ function buildDash_(d) {
   const q = (sel, extra, order, lbl) => '=IFERROR(QUERY(' + Q + ',"select ' + sel +
     ' where Col1 is not null' + extra + ' ' + order + ' label ' + lbl + '",0),"")';
   d.getRange('A11').setValue('PORTAL WISE').setFontWeight('bold');
-  d.getRange('E11').setValue('DATE WISE').setFontWeight('bold');
-  d.getRange('I11').setValue('TOP 10 SKU').setFontWeight('bold');
+  d.getRange('E11').setValue('TOP 10 SKU').setFontWeight('bold');
+  d.getRange('M51').setValue('DATE WISE').setFontWeight('bold');
   d.getRange('A12').setFormula(q('Col2, sum(Col4), sum(Col5)', ' group by Col2',
     'order by sum(Col5) desc', "Col2 'Portal', sum(Col4) 'Qty', sum(Col5) 'Revenue'"));
-  d.getRange('E12').setFormula(q('Col1, sum(Col4), sum(Col5)', ' group by Col1',
-    'order by Col1', "Col1 'Date', sum(Col4) 'Qty', sum(Col5) 'Revenue'"));
-  d.getRange('I12').setFormula(q('Col3, sum(Col4), sum(Col5)', " and Col3 <> '' group by Col3",
+  d.getRange('E12').setFormula(q('Col3, sum(Col4), sum(Col5)', " and Col3 <> '' group by Col3",
     'order by sum(Col5) desc limit 10', "Col3 'Universal SKU', sum(Col4) 'Qty', sum(Col5) 'Revenue'"));
+  d.getRange('M52').setFormula(q('Col1, sum(Col4), sum(Col5)', ' group by Col1',
+    'order by Col1', "Col1 'Date', sum(Col4) 'Qty', sum(Col5) 'Revenue'"));
 
-  d.getRange('E13:E').setNumberFormat('dd-mmm-yy').setHorizontalAlignment('left');
-  d.getRangeList(['B13:C', 'F13:G', 'J13:K']).setNumberFormat('#,##0');
-  d.getRangeList(['A12:C12', 'E12:G12', 'I12:K12']).setFontWeight('bold').setBackground('#d9eaf7');
+  d.getRange('M53:M').setNumberFormat('dd-mmm-yy').setHorizontalAlignment('left');
+  d.getRangeList(['B13:C', 'F13:G', 'N53:O']).setNumberFormat('#,##0');
+  d.getRangeList(['A12:C12', 'E12:G12', 'M52:O52']).setFontWeight('bold').setBackground('#d9eaf7');
+  buildSkuDrop_(d);
   d.setColumnWidths(1, 11, 125);
+  d.setColumnWidth(1, 190);
+  d.setColumnWidth(5, 190);
   d.setFrozenRows(1);
 }
