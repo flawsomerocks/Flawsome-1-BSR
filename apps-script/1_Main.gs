@@ -1,6 +1,6 @@
 /** FLAWSOME SALES DASHBOARD - file 1 of 4 (Main). Run setupDashboard() once. */
 const CFG = {
-  SOURCE: 'Sales', DASH: 'Dashboard', DATA: 'Data', HEADER_ROW: 1,
+  SOURCE: 'Compile', DASH: 'Dashboard', DATA: 'Data', HEADER_ROW: 1,
   HEADERS: {
     date: ['date'],
     portal: ['portal'],
