@@ -402,3 +402,41 @@ function misBuildTab_(mis, tab, values) {
     (months[months.length - 1].getMonth() + 1) + '/' + months[months.length - 1].getFullYear() + ') DashData se bhare.\n' +
     'Peela row (Marketing Spends) manual bharna hai. COGS 30% aur Platform Margin 30% default formula hai, apne hisaab se badal lena.';
 }
+
+
+// ---------- CHECK: portal-wise totals of the previous month (compare with your daily report) ----------
+function MIS_CHECK() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dd = misFindSheet_(ss, [MISC.DATA_TAB.toLowerCase()], true);
+  if (!dd) { misLog_(ss, 'ERROR: "' + MISC.DATA_TAB + '" tab nahi mila.'); return; }
+  const msg = misCheckText_(dd.getDataRange().getValues(), new Date());
+  Logger.log(msg);
+  misLog_(ss, msg);
+  ss.toast('Check report: "MIS Log" tab dekho', 'MIS', 10);
+}
+
+function misCheckText_(values, now) {
+  const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const y = first.getFullYear(), m = first.getMonth();
+  const head = values[0].map(h => String(h).trim().toLowerCase());
+  const iD = head.indexOf('date'), iP = head.indexOf('portal'), iQ = head.indexOf('qty'),
+        iT = head.indexOf('total'), iI = head.indexOf('item price');
+  if ([iD, iP, iQ, iT, iI].some(i => i < 0)) return 'ERROR: DashData headers nahi mile: ' + head.join(' | ');
+  const by = {}, all = { rows: 0, units: 0, total: 0, item: 0, itemBlank: 0 };
+  for (let r = 1; r < values.length; r++) {
+    const row = values[r];
+    const d = row[iD] instanceof Date ? row[iD] : new Date(row[iD]);
+    if (isNaN(d.getTime()) || d.getFullYear() !== y || d.getMonth() !== m) continue;
+    const p = String(row[iP]).trim() || '(blank portal)';
+    const o = by[p] = by[p] || { rows: 0, units: 0, total: 0, item: 0, itemBlank: 0 };
+    const t = Number(row[iT]) || 0, it = Number(row[iI]) || 0, q = Number(row[iQ]) || 0;
+    [o, all].forEach(x => { x.rows++; x.units += q; x.total += t; x.item += it; if (!(it > 0)) x.itemBlank++; });
+  }
+  const f = n => Math.round(n).toLocaleString('en-IN');
+  const lines = Object.keys(by).sort((a, b) => by[b].total - by[a].total).map(p =>
+    p + ' | rows ' + by[p].rows + ' | units ' + by[p].units + ' | Total ' + f(by[p].total) +
+    ' | ITEM PRICE ' + f(by[p].item) + ' (blank rows ' + by[p].itemBlank + ')');
+  return 'CHECK ' + (m + 1) + '/' + y + ' (DashData, portal wise)\n' + lines.join('\n') +
+    '\nALL | rows ' + all.rows + ' | units ' + all.units + ' | Total ' + f(all.total) +
+    ' | ITEM PRICE ' + f(all.item) + ' (blank rows ' + all.itemBlank + ')';
+}
