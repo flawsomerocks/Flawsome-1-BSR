@@ -7,7 +7,7 @@
  *   "MIS as per ITEM PRICE"   <- DashData "ITEM PRICE" column (blank -> Total is used)
  * Fills: Revenue (=SUM of channel rows), Units Sold, Channel / Product / SKU split.
  * NOT filled (not in DashData): Marketing Spends, Platform Margin, Opex -> manual.
- * Auto-runs EVERY DAY at ~9am: refreshes the previous month and the running month (MTD).
+ * Auto-runs EVERY DAY at ~9am: refreshes the running month (MTD), and the previous month only until the 10th. Older months are never touched.
  */
 const MISC = {
   DATA_TAB: 'DashData',
@@ -74,10 +74,13 @@ function installMisTrigger_() {
   ScriptApp.newTrigger('fillDaily').timeBased().everyDays(1).atHour(9).create();
 }
 
-// daily job: previous month (settles late data) + running month (MTD)
+// daily job: running month (MTD) every day + previous month ONLY until the 10th (late data settles).
+// After the 10th the previous month is frozen: older columns are never touched.
 function fillDaily() {
   const n = new Date();
-  fillMonths_([[n.getFullYear(), n.getMonth() - 1], [n.getFullYear(), n.getMonth()]]);
+  const list = [[n.getFullYear(), n.getMonth()]];
+  if (n.getDate() <= 10) list.unshift([n.getFullYear(), n.getMonth() - 1]);
+  fillMonths_(list);
 }
 
 function fillPreviousMonth() {
