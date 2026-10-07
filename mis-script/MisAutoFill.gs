@@ -45,7 +45,22 @@ function onOpen() {
 // run this once: fills last month and sets the 7th-of-month trigger
 function START_HERE() {
   installMisTrigger_();
-  fillPreviousMonth();
+  buildEmptyTabs_();     // empty MIS tabs -> format + all past months from DashData
+  fillPreviousMonth();   // then refresh last month
+}
+
+function buildEmptyTabs_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dd = misFindSheet_(ss, [MISC.DATA_TAB.toLowerCase()], true);
+  const msgs = [];
+  if (!dd) { misLog_(ss, 'ERROR: "' + MISC.DATA_TAB + '" tab nahi mila.'); return; }
+  const values = dd.getDataRange().getValues();
+  MISC.TABS.forEach(t => {
+    const mis = misFindSheet_(ss, t.words, false);
+    if (!mis || mis.getLastColumn() >= 3 && mis.getLastRow() >= 5) return;   // missing or already has content
+    try { msgs.push(misBuildTab_(mis, t, values)); } catch (e) { msgs.push('ERROR build [' + t.label + ']: ' + e.message); }
+  });
+  if (msgs.length) { misLog_(ss, msgs.join('\n\n')); SpreadsheetApp.flush(); }
 }
 
 function installMisTrigger_() {
@@ -263,4 +278,127 @@ function misColLetter_(n) {
   let s = '';
   while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
   return s;
+}
+
+
+// ---------- builds the MIS format in an EMPTY tab and fills every past month ----------
+const MISL = {
+  CH: ['Amazon', 'Flipkart', 'Myntra', 'Snapdeal', 'TATA 1MG', 'First cry', 'Tata Cliq', 'Pharmeasy',
+       'Website', 'Apollo', 'Cred', 'Wh smith', 'Meesho', 'Swiggy INSTAMRT', 'PoP Club', 'Blinkit'],
+  CAT: ['Sanitary Pads Cotton Based', 'Sanitary Pads Plant Based', 'Panty Liner Cotton Based',
+        'Panty Liner Plant Based', 'Period Pants', 'Combos'],
+  CAT_KEYS: ['padCotton', 'padPlant', 'plCotton', 'plPlant', 'pants', 'combos'],
+  SKUS: [
+    ['FPLPLA30', 'Flawsome Panty Liner (Pack of 30) Plant-Based'],
+    ['FPLC30', 'Flawsome Panty Liner (Pack of 30) Organic Cotton'],
+    ['FPPL4', 'Flawsome Period Pants (Pack of 4, Size L)'],
+    ['FPPXL4', 'Flawsome Period Pants (Pack of 4, Size XL)'],
+    ['FSPCL10', 'Flawsome Organic Sanitary Pads (Pack of 10, Size L)'],
+    ['FSPCL20', 'Flawsome Organic Sanitary Pads (Pack of 20, Size L)'],
+    ['FSPCL30', 'Flawsome Organic Sanitary Pads (Pack of 30, Size L)'],
+    ['FSPCXL10', 'Flawsome Organic Sanitary Pads (Pack of 10, Size XL)'],
+    ['FSPCXL20', 'Flawsome Organic Sanitary Pads (Pack of 20, Size XL)'],
+    ['FSPCXL30', 'Flawsome Organic Sanitary Pads (Pack of 30, Size XL)'],
+    ['FSPCXXL10', 'Flawsome Organic Sanitary Pads (Pack of 10, Size XXL)'],
+    ['FSPCXXL20', 'Flawsome Organic Sanitary Pads (Pack of 20, Size XXL)'],
+    ['FSPCXXL30', 'Flawsome Organic Sanitary Pads (Pack of 30, Size XXL)'],
+    ['FSPPLAL10', 'Flawsome Sensitive Sanitary Pads (Pack of 10, Size L)'],
+    ['FSPPLAL20', 'Flawsome Sensitive Sanitary Pads (Pack of 20, Size L)'],
+    ['FSPPLAL30', 'Flawsome Sensitive Sanitary Pads (Pack of 30, Size L)'],
+    ['FSPPLAXL10', 'Flawsome Sensitive Sanitary Pads (Pack of 10, Size XL)'],
+    ['FSPPLSXL20', 'Flawsome Sensitive Sanitary Pads (Pack of 20, Size XL)'],
+    ['FSPPLSXL30', 'Flawsome Sensitive Sanitary Pads (Pack of 30, Size XL)'],
+    ['FSPPLAXXL10', 'Flawsome Sensitive Sanitary Pads (Pack of 10, Size XXL)'],
+    ['FSPPLAXXL20', 'Flawsome Sensitive Sanitary Pads (Pack of 20, Size XXL)'],
+    ['FSPPLAXXL30', 'Flawsome Sensitive Sanitary Pads (Pack of 30, Size XXL)']
+  ]
+};
+
+function misMonthsFrom_(values) {
+  const iDate = values[0].map(h => String(h).trim().toLowerCase()).indexOf('date');
+  let min = null;
+  for (let r = 1; r < values.length; r++) {
+    const d = values[r][iDate];
+    if (d instanceof Date && !isNaN(d.getTime()) && d.getFullYear() >= 2000 && (!min || d < min)) min = d;
+  }
+  const out = [];
+  if (!min) return out;
+  const now = new Date(), end = new Date(now.getFullYear(), now.getMonth() - 1, 1);   // previous month
+  for (let d = new Date(min.getFullYear(), min.getMonth(), 1); d <= end && out.length < 36; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    out.push(d);
+  }
+  return out;
+}
+
+function misBuildTab_(mis, tab, values) {
+  const months = misMonthsFrom_(values);
+  if (!months.length) return '[' + mis.getName() + '] DashData me koi valid date nahi mili. Tab nahi bana.';
+  const N = 66, FIRST = 4, TOTAL = FIRST + months.length;
+  const rows = [];
+  for (let i = 0; i < N; i++) rows.push([]);
+
+  // labels: A = section / line item, B = channel / product name, C = SKU code
+  const A = (r, v) => { rows[r - 1][0] = v; }, B = (r, v) => { rows[r - 1][1] = v; }, C = (r, v) => { rows[r - 1][2] = v; };
+  A(1, 'XLEAP CARE PRIVATE LIMITED'); A(2, 'Month'); C(2, 'SKU Code');
+  A(4, 'Revenue'); A(6, 'COGS'); A(8, 'CM1'); A(10, 'Marketing Spends (E-Commerce)'); A(11, 'Platform Margin');
+  A(13, 'CM2'); A(14, 'CM2 %'); A(16, 'ROAS (Blended)'); A(18, 'Units Sold');
+  A(20, 'Channel Wise Revenue Split'); MISL.CH.forEach((n, i) => B(20 + i, n));
+  A(37, 'Product Wise Revenue Split'); MISL.CAT.forEach((n, i) => B(37 + i, n));
+  A(44, 'SKU Wise Revenue Split'); MISL.SKUS.forEach((s, i) => { B(44 + i, s[1]); C(44 + i, s[0]); });
+  B(66, "Rest SKU's (Combo's)");
+
+  const sumRows = [4, 6, 8, 10, 11, 13, 18];
+  for (let i = 0; i < 16; i++) sumRows.push(20 + i);
+  for (let i = 0; i < 6; i++) sumRows.push(37 + i);
+  for (let i = 0; i < MISL.SKUS.length; i++) sumRows.push(44 + i);
+  sumRows.push(66);
+
+  months.forEach((m, k) => {
+    const c = FIRST + k, L = misColLetter_(c);
+    const agg = misAggregate_(values, m.getFullYear(), m.getMonth(), tab.measure);
+    const put = (r, v) => { rows[r - 1][c - 1] = v; };
+    put(2, m);
+    put(4, '=SUM(' + L + '20:' + L + '35)');
+    put(6, '=' + L + '4*30%'); put(8, '=' + L + '4-' + L + '6');
+    put(11, '=' + L + '4*30%');
+    put(13, '=' + L + '8-' + L + '10-' + L + '11');
+    put(14, '=IFERROR(' + L + '13/' + L + '4,"")'); put(16, '=IFERROR(' + L + '4/' + L + '10,"")');
+    put(18, agg.units);
+    MISL.CH.forEach((n, i) => put(20 + i, Math.round((agg.channels[n.toLowerCase()] || 0) * 100) / 100));
+    MISL.CAT_KEYS.forEach((key, i) => put(37 + i, Math.round((agg.cats[key] || 0) * 100) / 100));
+    let rest = agg.restSku;
+    const known = {};
+    MISL.SKUS.forEach((s, i) => { known[s[0]] = 1; put(44 + i, Math.round((agg.skus[s[0]] || 0) * 100) / 100); });
+    Object.keys(agg.skus).forEach(k2 => { if (!known[k2]) rest += agg.skus[k2]; });
+    put(66, Math.round(rest * 100) / 100);
+  });
+
+  // Total column
+  const TL = misColLetter_(TOTAL);
+  rows[1][TOTAL - 1] = 'Total';
+  sumRows.forEach(r => { rows[r - 1][TOTAL - 1] = '=SUM(D' + r + ':INDEX($' + r + ':$' + r + ',COLUMN()-1))'; });
+  rows[13][TOTAL - 1] = '=IFERROR(' + TL + '13/' + TL + '4,"")';
+  rows[15][TOTAL - 1] = '=IFERROR(' + TL + '4/' + TL + '10,"")';
+
+  const width = TOTAL;
+  rows.forEach(r => { for (let j = 0; j < width; j++) if (r[j] === undefined) r[j] = ''; });
+  mis.getRange(1, 1, N, width).setValues(rows);
+
+  // look & feel
+  mis.getRange(4, FIRST, N - 3, months.length + 1).setNumberFormat('#,##0');
+  mis.getRange(14, FIRST, 1, months.length + 1).setNumberFormat('0.0%');
+  mis.getRange(16, FIRST, 1, months.length + 1).setNumberFormat('0.00');
+  mis.getRange(2, FIRST, 1, months.length).setNumberFormat('mmm-yy');
+  mis.getRange(2, 1, 1, width).setFontWeight('bold').setBackground('#1f4e78').setFontColor('#ffffff');
+  mis.getRange(1, 1).setFontWeight('bold').setFontSize(12);
+  [4, 8, 13].forEach(r => mis.getRange(r, 1, 1, width).setFontWeight('bold'));
+  [20, 37, 44].forEach(r => mis.getRange(r, 1).setFontWeight('bold'));
+  mis.getRange(10, FIRST, 1, months.length).setBackground('#fff2cc');   // manual input row
+  mis.setFrozenRows(2); mis.setFrozenColumns(3);
+  mis.setColumnWidth(1, 210); mis.setColumnWidth(2, 330); mis.setColumnWidth(3, 120);
+
+  return '[' + mis.getName() + '] FORMAT BANA DIYA: ' + months.length + ' mahine (' +
+    (months[0].getMonth() + 1) + '/' + months[0].getFullYear() + ' se ' +
+    (months[months.length - 1].getMonth() + 1) + '/' + months[months.length - 1].getFullYear() + ') DashData se bhare.\n' +
+    'Peela row (Marketing Spends) manual bharna hai. COGS 30% aur Platform Margin 30% default formula hai, apne hisaab se badal lena.';
 }
