@@ -7,7 +7,11 @@
  */
 const MISC = {
   DATA: 'DashData',
-  MIS: 'MIS',
+  // each MIS tab and which DashData column feeds its revenue
+  TABS: [
+    { name: 'MIS as per 1 Total', measure: 'total' },
+    { name: 'MIS as per ITEM PRICE', measure: 'item price' }   // blank ITEM PRICE -> Total is used
+  ],
   HEADER_ROW: 2,       // row with month headers in MIS
   FIRST_MONTH_COL: 3,  // column C
   REV_ROW: 4,
@@ -62,15 +66,24 @@ function fillSpecificMonth() {
 
 function fillMis_(year, monthIdx) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const dd = ss.getSheetByName(MISC.DATA), mis = ss.getSheetByName(MISC.MIS);
+  const dd = ss.getSheetByName(MISC.DATA);
   if (!dd) throw new Error('"' + MISC.DATA + '" tab nahi mila.');
-  if (!mis) throw new Error('"' + MISC.MIS + '" tab nahi mila (xlsx import karke MIS tab banao).');
   const first = new Date(year, monthIdx, 1);
   year = first.getFullYear(); monthIdx = first.getMonth();
+  const values = dd.getDataRange().getValues();
 
-  const agg = misAggregate_(dd.getDataRange().getValues(), year, monthIdx);
+  const msgs = [];
+  MISC.TABS.forEach(t => {
+    const mis = ss.getSheetByName(t.name);
+    if (!mis) { msgs.push('TAB NAHI MILA: "' + t.name + '"'); return; }
+    msgs.push(fillOneMis_(mis, t, misAggregate_(values, year, monthIdx, t.measure), year, monthIdx));
+  });
+  const msg = msgs.join('\n\n');
+  Logger.log(msg);
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { ss.toast('MIS filled', 'MIS', 5); }
+}
 
-  // ---- locate / create the month column ----
+function fillOneMis_(mis, tab, agg, year, monthIdx) {
   let c = misFindMonthCol_(mis, year, monthIdx);
   let created = false;
   if (!c) { c = misInsertMonthCol_(mis, year, monthIdx); created = true; }
@@ -106,37 +119,37 @@ function fillMis_(year, monthIdx) {
   put(MISC.UNITS_ROW, agg.units);
   if (chLast) mis.getRange(MISC.REV_ROW, c).setFormula('=SUM(' + L + chFirst + ':' + L + chLast + ')');
 
-  // ---- report ----
-  const msg = [
-    'MIS ' + (monthIdx + 1) + '/' + year + ' -> column ' + L + (created ? ' (new column)' : ''),
-    'Rows used: ' + agg.rows + ' | Revenue(DashData Total): ' + Math.round(agg.revenue) + ' | Units: ' + agg.units,
-    'Rows without valid date in this period are not counted.',
-    Object.keys(agg.unmappedPortals).length ? 'Portal MIS me nahi hai (revenue channel split me nahi gaya): ' +
+  return [
+    '[' + tab.name + '] ' + (monthIdx + 1) + '/' + year + ' -> column ' + L + (created ? ' (new column)' : ''),
+    'Rows: ' + agg.rows + ' | Revenue: ' + Math.round(agg.revenue) + ' | Units: ' + agg.units,
+    agg.fallbackRows ? 'ITEM PRICE khaali tha, Total use hua: ' + agg.fallbackRows + ' rows (' + Math.round(agg.fallbackAmt) + ')' : '',
+    Object.keys(agg.unmappedPortals).length ? 'Portal MIS me nahi hai (channel split me nahi gaya): ' +
       Object.keys(agg.unmappedPortals).map(p => p + '=' + Math.round(agg.unmappedPortals[p])).join(', ') : '',
     'Rest SKU (combos / unmatched): ' + Math.round(agg.restSku),
     'Manual bharna hai: Marketing Spends, Platform Margin, Opex.'
   ].filter(Boolean).join('\n');
-  Logger.log(msg);
-  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { ss.toast('MIS filled: ' + L, 'MIS', 5); }
 }
 
 // ---------- pure logic (no Sheets calls) ----------
-function misAggregate_(values, year, monthIdx) {
+function misAggregate_(values, year, monthIdx, measure) {
   const head = values[0].map(h => String(h).trim().toLowerCase());
   const ix = n => head.indexOf(n);
-  const iDate = ix('date'), iU = ix('sku'), iQ = ix('qty'), iP = ix('portal'), iT = ix('total');
-  if ([iDate, iU, iQ, iP, iT].some(i => i < 0)) throw new Error('DashData headers nahi mile: ' + head.join(' | '));
+  const iDate = ix('date'), iU = ix('sku'), iQ = ix('qty'), iP = ix('portal'), iT = ix('total'), iM = ix(measure || 'total');
+  if ([iDate, iU, iQ, iP, iT, iM].some(i => i < 0)) throw new Error('DashData headers nahi mile: ' + head.join(' | '));
 
   const portalToCh = {};
   Object.keys(MISC.CHANNELS).forEach(k => MISC.CHANNELS[k].forEach(p => { portalToCh[p] = k; }));
 
-  const a = { rows: 0, revenue: 0, units: 0, channels: {}, cats: {}, skus: {}, restSku: 0, unmappedPortals: {} };
+  const a = { fallbackRows: 0, fallbackAmt: 0, rows: 0, revenue: 0, units: 0, channels: {}, cats: {}, skus: {}, restSku: 0, unmappedPortals: {} };
   for (let r = 1; r < values.length; r++) {
     const row = values[r];
     let d = row[iDate];
     if (!(d instanceof Date)) d = new Date(d);
     if (isNaN(d.getTime()) || d.getFullYear() !== year || d.getMonth() !== monthIdx) continue;
-    const rev = Number(row[iT]) || 0, qty = Number(row[iQ]) || 0;
+    let rev = Number(row[iM]);
+    if (iM !== iT && !(rev > 0)) { rev = Number(row[iT]) || 0; a.fallbackRows++; a.fallbackAmt += rev; }
+    rev = rev || 0;
+    const qty = Number(row[iQ]) || 0;
     const portal = String(row[iP]).trim().toLowerCase();
     a.rows++; a.revenue += rev; a.units += qty;
 
