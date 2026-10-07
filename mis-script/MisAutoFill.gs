@@ -11,6 +11,8 @@
  */
 const MISC = {
   DATA_TAB: 'DashData',
+  SPEND_TAB: 'SpendData',   // IMPORTRANGE of the Ads tracker's hidden _Daily tab (see SETUP_SPEND)
+  SPEND_LABEL: 'marketing spends (e-commerce)',
   // tab found by words in its name (case-insensitive), so small spelling changes are ok
   TABS: [
     { label: 'MIS as per 1 Total', words: ['mis', 'total'], measure: 'total' },
@@ -39,6 +41,7 @@ function onOpen() {
     .addItem('START HERE (fill last month + auto-run 7th)', 'START_HERE')
     .addItem('Fill previous month only', 'fillPreviousMonth')
     .addItem('Fill a specific month…', 'fillSpecificMonth')
+    .addItem('Link Ad Spend (one time)', 'SETUP_SPEND')
     .addToUi();
 }
 
@@ -163,6 +166,10 @@ function fillOneMis_(mis, tab, agg, year, monthIdx) {
   if (chLast && rowOf[MISC.REV]) mis.getRange(rowOf[MISC.REV], c).setFormula('=SUM(' + L + chFirst + ':' + L + chLast + ')');
   else missing.push(MISC.REV);
 
+  const spendOn = !!mis.getParent().getSheetByName(MISC.SPEND_TAB);
+  if (spendOn && rowOf[MISC.SPEND_LABEL]) {
+    mis.getRange(rowOf[MISC.SPEND_LABEL], c).setFormula(misSpendFormula_(year, monthIdx + 1));
+  }
   if (created) {   // new column: copy the formulas of the previous month column (COGS, CM1 ...)
     MISC.FORMULA_LABELS.forEach(lb => {
       const row = rowOf[lb];
@@ -180,7 +187,8 @@ function fillOneMis_(mis, tab, agg, year, monthIdx) {
       Object.keys(agg.unmappedPortals).map(p => p + '=' + Math.round(agg.unmappedPortals[p])).join(', ') : '',
     missing.length ? 'MIS me ye row nahi mili (skip): ' + missing.join(', ') : '',
     'Rest SKU (combos / unmatched): ' + Math.round(agg.restSku),
-    'Manual bharna hai: Marketing Spends, Platform Margin, Opex.'
+    spendOn ? 'Marketing Spends: SpendData se linked (formula). Manual bharna hai: Platform Margin, Opex.'
+            : 'Manual bharna hai: Marketing Spends, Platform Margin, Opex. (Spend link karne ke liye menu > Link Ad Spend)'
   ].filter(Boolean).join('\n');
 }
 
@@ -334,6 +342,7 @@ function misBuildTab_(mis, tab, values) {
   const months = misMonthsFrom_(values);
   if (!months.length) return '[' + mis.getName() + '] DashData me koi valid date nahi mili. Tab nahi bana.';
   const N = 66, FIRST = 4, TOTAL = FIRST + months.length;
+  const spendOn = !!mis.getParent().getSheetByName(MISC.SPEND_TAB);
   const rows = [];
   for (let i = 0; i < N; i++) rows.push([]);
 
@@ -361,6 +370,7 @@ function misBuildTab_(mis, tab, values) {
     put(4, '=SUM(' + L + '20:' + L + '35)');
     put(6, '=' + L + '4*30%'); put(8, '=' + L + '4-' + L + '6');
     put(11, '=' + L + '4*30%');
+    if (spendOn) put(10, misSpendFormula_(m.getFullYear(), m.getMonth() + 1));
     put(13, '=' + L + '8-' + L + '10-' + L + '11');
     put(14, '=IFERROR(' + L + '13/' + L + '4,"")'); put(16, '=IFERROR(' + L + '4/' + L + '10,"")');
     put(18, agg.units);
@@ -439,4 +449,50 @@ function misCheckText_(values, now) {
   return 'CHECK ' + (m + 1) + '/' + y + ' (DashData, portal wise)\n' + lines.join('\n') +
     '\nALL | rows ' + all.rows + ' | units ' + all.units + ' | Total ' + f(all.total) +
     ' | ITEM PRICE ' + f(all.item) + ' (blank rows ' + all.itemBlank + ')';
+}
+
+
+// ---------- AD SPEND LINK ----------
+// SpendData = IMPORTRANGE of the Ads tracker's hidden "_Daily" tab: A Date | B Portal | C Sales | D Units | E Orders | F Ad Spend | G Ad Sales | H Impressions
+function misSpendFormula_(year, month1) {
+  const S = MISC.SPEND_TAB + '!';
+  const d = 'DATE(' + year + ',' + month1 + ',1)';
+  return '=SUMIFS(' + S + '$F:$F,' + S + '$A:$A,">="&' + d + ',' + S + '$A:$A,"<="&EOMONTH(' + d + ',0))';
+}
+
+function SETUP_SPEND() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('Ads tracker ka Google Sheet link paste karo (jisme "Master Data" aur hidden "_Daily" tab hai)');
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const url = r.getResponseText().trim();
+  if (!/\/d\/[A-Za-z0-9_-]+/.test(url)) { ui.alert('Ye Google Sheet ka link nahi lag raha. /d/.... wala poora link daalo.'); return; }
+  misSetupSpend_(SpreadsheetApp.getActiveSpreadsheet(), url);
+  ui.alert('SpendData tab ban gaya.\n\nZARURI: SpendData tab me A1 cell par click karo, jo "#REF!" ya "Allow access" dikhe use dabao.\n' +
+    'Uske baad MIS tabs ka Marketing Spends row apne aap bhar jayega.');
+}
+
+function misSetupSpend_(ss, url) {
+  let sh = ss.getSheetByName(MISC.SPEND_TAB);
+  if (!sh) sh = ss.insertSheet(MISC.SPEND_TAB);
+  sh.clear();
+  sh.getRange('A1').setFormula('=IMPORTRANGE("' + url.replace(/"/g, '') + '","_Daily!A:H")');
+  const done = [];
+  MISC.TABS.forEach(t => {
+    const mis = misFindSheet_(ss, t.words, false);
+    if (!mis || mis.getLastColumn() < 3 || mis.getLastRow() < 5) return;
+    const grid = mis.getRange(1, 1, mis.getLastRow(), 4).getValues();
+    let row = 0;
+    grid.forEach((rw, i) => rw.forEach(cell => { if (!row && String(cell).trim().toLowerCase() === MISC.SPEND_LABEL) row = i + 1; }));
+    if (!row) { done.push(mis.getName() + ': "Marketing Spends (E-Commerce)" row nahi mili'); return; }
+    const hr = misHeaderRow_(mis);
+    const hdr = mis.getRange(hr, 1, 1, mis.getLastColumn()).getValues()[0];
+    let n = 0;
+    for (let i = 2; i < hdr.length; i++) {
+      const ym = misHeaderToYm_(hdr[i]);
+      if (ym) { mis.getRange(row, i + 1).setFormula(misSpendFormula_(ym.y, ym.m + 1)); n++; }
+    }
+    done.push(mis.getName() + ': ' + n + ' mahino ka spend link hua');
+  });
+  misLog_(ss, 'SPEND LINK: ' + done.join(' | '));
+  return done;
 }
