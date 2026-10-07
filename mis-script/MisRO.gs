@@ -125,8 +125,9 @@ function roInvoiceInfo_(ss) {
   let cValue = RO.INVOICE_VALUE === 'taxable' ? find(h => h.indexOf('taxable') >= 0) : -1;
   if (cValue < 0) cValue = find(h => h === 'total' || h === 'invoicetotal' || h === 'totalamount' || h === 'amount');
   const cDate = find(h => h === 'invoicedate' || h === 'date');
-  const cMonth = find(h => h.indexOf('month') >= 0);
-  if (cBuyer < 0 || cValue < 0 || (cDate < 0 && cMonth < 0)) {
+  const cKey = find(h => h === 'monthkey');
+  const cMonth = find(h => h.indexOf('month') >= 0 && h !== 'monthkey');
+  if (cBuyer < 0 || cValue < 0 || (cDate < 0 && cMonth < 0 && cKey < 0)) {
     return { err: 'Invoice Log ke headers samajh nahi aaye: ' + vals[hr].join(' | ') };
   }
   const data = vals.slice(hr + 1).filter(r => r.some(c => c !== '' && c !== null));
@@ -134,12 +135,13 @@ function roInvoiceInfo_(ss) {
   // which column can be used for the month, and what kind of values does it hold?
   let col = -1, kind = '';
   const samples = [];
-  [cDate, cMonth].filter(c => c >= 0).forEach(c => {
+  [cKey, cDate, cMonth].filter(c => c >= 0).forEach(c => {
     if (col >= 0) return;
     const cells = data.map(r => r[c]).filter(v => v !== '' && v !== null);
     if (!cells.length) return;
     samples.push(vals[hr][c] + ': ' + cells.slice(0, 3).map(v => (roIsDate_(v) ? 'DATE ' : typeof v + ' ') + String(v)).join(' | '));
-    if (cells.every(roIsDate_)) { col = c; kind = 'date'; }
+    if (cells.every(v => /^\d{6}$/.test(String(v).trim()) && +String(v).trim().slice(4) >= 1 && +String(v).trim().slice(4) <= 12)) { col = c; kind = 'key6'; }
+    else if (cells.every(roIsDate_)) { col = c; kind = 'date'; }
     else if (cells.every(v => typeof v === 'string' && /^\d{4}-\d{2}(-\d{2})?/.test(v.trim()))) { col = c; kind = 'iso'; }
     else if (cells.every(v => typeof v === 'string' && /^[A-Za-z]{3,}[ -]\d{2,4}$/.test(v.trim()))) { col = c; kind = 'monyy'; }
   });
@@ -165,6 +167,9 @@ function roInvoiceInfo_(ss) {
   const common = ',' + rng(cStatus) + ',"' + activeText.replace(/"/g, '') + '",' + rng(cBuyer) + ',"*' + RO.BUYER_WORD.toUpperCase() + '*")';
   const formulaFor = (y, m) => {
     const d = 'DATE(' + y + ',' + (m + 1) + ',1)';
+    if (kind === 'key6') {
+      return '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',' + (y * 100 + m + 1) + common;
+    }
     if (kind === 'date') {
       return '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',">="&' + d + ',' + rng(col) + ',"<="&EOMONTH(' + d + ',0)' + common;
     }
@@ -181,6 +186,7 @@ function roInvoiceInfo_(ss) {
 function roYm_(v) {
   if (roIsDate_(v)) return { y: v.getFullYear(), m: v.getMonth() };
   const s = String(v).trim();
+  if (/^\d{6}$/.test(s) && +s.slice(4) >= 1 && +s.slice(4) <= 12) return { y: +s.slice(0, 4), m: +s.slice(4) - 1 };
   let x = s.match(/^(\d{4})[-\/.](\d{1,2})/);
   if (x && +x[2] >= 1 && +x[2] <= 12) return { y: +x[1], m: +x[2] - 1 };
   x = s.match(/^(\d{1,2})[-\/. ](\d{1,2})[-\/. ](\d{4})/);
