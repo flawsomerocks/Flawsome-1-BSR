@@ -39,7 +39,7 @@ function mmMonthsFrom_(values) {
   let min = null;
   for (let r = 0; r < values.length; r++) {
     const d = values[r][0];
-    if (d instanceof Date && !isNaN(d.getTime()) && d.getFullYear() >= 2000 && (!min || d < min)) min = d;
+    if (mmIsDate_(d) && d.getFullYear() >= 2000 && (!min || d < min)) min = d;
   }
   const out = [];
   if (!min) return out;
@@ -144,7 +144,7 @@ function mmEnsureCurrentMonth_(ss) {
     let tot = 0, last = -1;
     hdr.forEach((h, i) => {
       if (String(h).trim().toLowerCase() === 'total') tot = i + 1;
-      else if (i >= 3 && h instanceof Date && !isNaN(h.getTime())) last = Math.max(last, h.getFullYear() * 12 + h.getMonth());
+      else if (i >= 3 && mmIsDate_(h)) last = Math.max(last, h.getFullYear() * 12 + h.getMonth());
     });
     if (!tot || tot < 5 || last < 0 || last >= target) break;
     const next = last + 1, y = Math.floor(next / 12), m = next % 12;
@@ -160,9 +160,13 @@ function mmFindMonthCol_(sh, hr, y, m) {
   const hdr = sh.getRange(hr, 1, 1, sh.getLastColumn()).getValues()[0];
   for (let i = 2; i < hdr.length; i++) {
     const v = hdr[i];
-    if (v instanceof Date && !isNaN(v.getTime()) && v.getFullYear() === y && v.getMonth() === m) return i + 1;
+    if (mmIsDate_(v) && v.getFullYear() === y && v.getMonth() === m) return i + 1;
   }
   return 0;
+}
+
+function mmIsDate_(v) {
+  return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime());
 }
 
 function mmColLetter_(n) {
