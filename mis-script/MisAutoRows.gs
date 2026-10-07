@@ -5,14 +5,14 @@
  *     inside the Channel block so "Revenue = SUM(channels)" includes it, and back-fills that new row for all months;
  *  2. keeps those extra channel rows updated (running month; previous month until the 10th).
  * New SKUs are NOT added: they stay inside "Rest SKU's (Combo's)".
- * Works on: "MIS as per 1 Total", "MIS as per ITEM PRICE", "MIS as per RO". Old months are never overwritten.
+ * Works on: "MIS as per 1 Total" and "MIS as per ITEM PRICE" only (NOT "MIS as per RO"). Old months are never overwritten.
  * Needs MisAutoFill.gs (helper functions) in the same project.
  */
 const AR = {
+  // "MIS as per RO" is NOT here on purpose: its rows stay as they are (only Blinkit comes from RO invoices)
   TABS: [
     { words: ['mis', 'total'], measure: 'total' },
-    { words: ['mis', 'item'], measure: 'item price' },
-    { key: 'misasperro', measure: 'total' }
+    { words: ['mis', 'item'], measure: 'item price' }
   ],
   HOUR: 8,
   MIN_REV: 1,              // a portal needs at least this revenue in the month to get a row
