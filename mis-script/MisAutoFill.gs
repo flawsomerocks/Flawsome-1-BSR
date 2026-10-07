@@ -89,11 +89,28 @@ function fillMis_(year, monthIdx) {
   }
   const msg = msgs.join('\n\n');
   Logger.log(msg);
-  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { ss.toast(msg.slice(0, 200), 'MIS', 10); }
+  misLog_(ss, msg);
+  ss.toast('Report: "MIS Log" tab dekho', 'MIS', 10);
+}
+
+function misLog_(ss, msg) {
+  let sh = ss.getSheetByName('MIS Log');
+  if (!sh) {
+    sh = ss.insertSheet('MIS Log');
+    sh.getRange(1, 1, 1, 2).setValues([['Time', 'Report']]).setFontWeight('bold');
+    sh.setColumnWidth(1, 150); sh.setColumnWidth(2, 700);
+  }
+  sh.insertRowAfter(1);
+  sh.getRange(2, 1, 1, 2).setValues([[new Date(), msg]]);
+  sh.getRange(2, 2).setWrap(true);
+  sh.getRange(2, 1, 1, 2).setVerticalAlignment('top');
 }
 
 function fillOneMis_(mis, tab, agg, year, monthIdx) {
   const title = '[' + mis.getName() + '] ' + (monthIdx + 1) + '/' + year;
+  if (mis.getLastColumn() < 3 || mis.getLastRow() < 5) {
+    return title + '\nYe tab khaali hai. Pehle MIS ka format (Month header row, Revenue, Channel Wise, SKU rows) is tab me daalo (xlsx import / copy-paste), phir dobara run karo.';
+  }
   if (!agg.rows) return title + '\nDashData me is mahine ka data nahi mila. Kuch nahi likha.';
 
   const hr = misHeaderRow_(mis);
