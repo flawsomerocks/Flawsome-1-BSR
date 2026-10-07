@@ -78,12 +78,17 @@ function fillMis_(year, monthIdx) {
 
   // ---- write rows (found by label in col B) ----
   const lastRow = mis.getLastRow();
-  const labels = mis.getRange(1, 2, lastRow, 1).getValues().map(r => String(r[0]).trim().toLowerCase());
-  const rowOf = {};
-  labels.forEach((t, i) => { if (t && rowOf[t] === undefined) rowOf[t] = i + 1; });
-  // SKU rows are matched by parsed key (labels are long product names)
-  const skuRows = {};
-  labels.forEach((t, i) => { const k = misNameKey_(t); if (k && !skuRows[k]) skuRows[k] = i + 1; });
+  const grid = mis.getRange(1, 1, lastRow, 4).getValues();   // columns A-D
+  const rowOf = {}, skuRows = {};
+  grid.forEach((r, i) => {
+    const t = String(r[1]).trim().toLowerCase();
+    if (t && rowOf[t] === undefined) rowOf[t] = i + 1;
+    // SKU rows are found by the SKU code written next to the product name (FSPCL10, FPPL4 ...)
+    r.forEach(cell => {
+      const code = String(cell).trim().toUpperCase();
+      if (/^F[A-Z]+\d+$/.test(code) && !skuRows[code]) skuRows[code] = i + 1;
+    });
+  });
 
   const put = (row, v) => { if (row) mis.getRange(row, c).setValue(Math.round(v * 100) / 100); };
   let chFirst = 1e9, chLast = 0;
@@ -119,7 +124,7 @@ function fillMis_(year, monthIdx) {
 function misAggregate_(values, year, monthIdx) {
   const head = values[0].map(h => String(h).trim().toLowerCase());
   const ix = n => head.indexOf(n);
-  const iDate = ix('date'), iU = ix('universal sku'), iQ = ix('qty'), iP = ix('portal'), iT = ix('total');
+  const iDate = ix('date'), iU = ix('sku'), iQ = ix('qty'), iP = ix('portal'), iT = ix('total');
   if ([iDate, iU, iQ, iP, iT].some(i => i < 0)) throw new Error('DashData headers nahi mile: ' + head.join(' | '));
 
   const portalToCh = {};
@@ -139,47 +144,23 @@ function misAggregate_(values, year, monthIdx) {
     if (ch) a.channels[ch] = (a.channels[ch] || 0) + rev;
     else a.unmappedPortals[portal] = (a.unmappedPortals[portal] || 0) + rev;
 
-    const key = misUniKey_(row[iU]);
+    const key = String(row[iU]).trim().toUpperCase();
     const cat = misCatOf_(key);
     a.cats[cat] = (a.cats[cat] || 0) + rev;
-    if (key) a.skus[key] = (a.skus[key] || 0) + rev; else a.restSku += rev;
+    if (key) a.skus[key] = (a.skus[key] || 0) + rev;
   }
   return a;
 }
 
-// Universal SKU -> key like "pad|10|xl|cotton", "pl|30|plant", "pp|4|xl" (null = combo / unknown)
-function misUniKey_(u) {
-  const s = String(u).toLowerCase().replace(/\s+/g, '');
-  let m = s.match(/^pantyliner(cotton|plant)0?(\d+)$/);
-  if (m) return 'pl|' + m[2] + '|' + m[1];
-  m = s.match(/^periodpants(xl|l)\((\d+)\)$/);
-  if (m) return 'pp|' + m[2] + '|' + m[1];
-  m = s.match(/^(xxl|xxi|xl|xi|l)0?(\d+)(cotton|plant)$/);
-  if (m) {
-    const size = (m[1] === 'xxl' || m[1] === 'xxi') ? 'xxl' : (m[1] === 'xl' || m[1] === 'xi') ? 'xl' : 'l';
-    return 'pad|' + m[2] + '|' + size + '|' + m[3];
-  }
-  return null;
-}
-
-// MIS row label (long product name) -> same key
-function misNameKey_(t) {
-  const s = String(t).toLowerCase();
-  if (s.indexOf('flawsome') < 0) return null;
-  const pack = (s.match(/pack of (\d+)/) || [])[1];
-  const size = (s.match(/size\s+(xxl|xl|l)\b/) || [])[1];
-  if (s.indexOf('panty liner') >= 0) return 'pl|' + pack + '|' + (s.indexOf('plant-based') >= 0 ? 'plant' : 'cotton');
-  if (s.indexOf('period pants') >= 0) return 'pp|' + pack + '|' + size;
-  if (s.indexOf('organic sanitary') >= 0) return 'pad|' + pack + '|' + size + '|cotton';
-  if (s.indexOf('sensitive sanitary') >= 0) return 'pad|' + pack + '|' + size + '|plant';
-  return null;
-}
-
-function misCatOf_(key) {
-  if (!key) return 'combos';
-  if (key.indexOf('pl|') === 0) return key.endsWith('plant') ? 'plPlant' : 'plCotton';
-  if (key.indexOf('pp|') === 0) return 'pants';
-  return key.endsWith('plant') ? 'padPlant' : 'padCotton';
+// category from SKU code: FPLPLA.. panty liner plant, FPLC.. panty liner cotton, FPP.. period pants,
+// FSPC.. pads cotton, FSPP.. pads plant, anything else = combos
+function misCatOf_(code) {
+  if (code.indexOf('FPLPLA') === 0) return 'plPlant';
+  if (code.indexOf('FPLC') === 0) return 'plCotton';
+  if (code.indexOf('FPP') === 0) return 'pants';
+  if (code.indexOf('FSPC') === 0) return 'padCotton';
+  if (code.indexOf('FSPP') === 0) return 'padPlant';
+  return 'combos';
 }
 
 // ---------- sheet helpers ----------
