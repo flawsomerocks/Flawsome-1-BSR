@@ -7,7 +7,7 @@
  *   "MIS as per ITEM PRICE"   <- DashData "ITEM PRICE" column (blank -> Total is used)
  * Fills: Revenue (=SUM of channel rows), Units Sold, Channel / Product / SKU split.
  * NOT filled (not in DashData): Marketing Spends, Platform Margin, Opex -> manual.
- * Auto-runs on the 7th of every month (fills the previous month).
+ * Auto-runs EVERY DAY at ~9am: refreshes the previous month and the running month (MTD).
  */
 const MISC = {
   DATA_TAB: 'DashData',
@@ -38,18 +38,18 @@ const MISC = {
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('📊 MIS')
-    .addItem('START HERE (fill last month + auto-run 7th)', 'START_HERE')
+    .addItem('START HERE (fill now + daily auto-run 9am)', 'START_HERE')
     .addItem('Fill previous month only', 'fillPreviousMonth')
     .addItem('Fill a specific month…', 'fillSpecificMonth')
     .addItem('Link Ad Spend (one time)', 'SETUP_SPEND')
     .addToUi();
 }
 
-// run this once: fills last month and sets the 7th-of-month trigger
+// run this once: builds empty tabs, fills previous + running month, sets the daily 9am trigger
 function START_HERE() {
   installMisTrigger_();
   buildEmptyTabs_();     // empty MIS tabs -> format + all past months from DashData
-  fillPreviousMonth();   // then refresh last month
+  fillDaily();           // previous month + running month (MTD)
 }
 
 function buildEmptyTabs_() {
@@ -68,14 +68,21 @@ function buildEmptyTabs_() {
 
 function installMisTrigger_() {
   ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'fillPreviousMonth') ScriptApp.deleteTrigger(t);
+    const h = t.getHandlerFunction();
+    if (h === 'fillPreviousMonth' || h === 'fillDaily') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('fillPreviousMonth').timeBased().onMonthDay(7).atHour(9).create();
+  ScriptApp.newTrigger('fillDaily').timeBased().everyDays(1).atHour(9).create();
+}
+
+// daily job: previous month (settles late data) + running month (MTD)
+function fillDaily() {
+  const n = new Date();
+  fillMonths_([[n.getFullYear(), n.getMonth() - 1], [n.getFullYear(), n.getMonth()]]);
 }
 
 function fillPreviousMonth() {
   const n = new Date();
-  fillMis_(n.getFullYear(), n.getMonth() - 1);
+  fillMonths_([[n.getFullYear(), n.getMonth() - 1]]);
 }
 
 function fillSpecificMonth() {
@@ -84,25 +91,27 @@ function fillSpecificMonth() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
   const m = r.getResponseText().trim().match(/^(\d{4})-(\d{1,2})$/);
   if (!m) { ui.alert('Format galat. Example: 2026-09'); return; }
-  fillMis_(Number(m[1]), Number(m[2]) - 1);
+  fillMonths_([[Number(m[1]), Number(m[2]) - 1]]);
 }
 
-function fillMis_(year, monthIdx) {
+function fillMonths_(list) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const first = new Date(year, monthIdx, 1);
-  year = first.getFullYear(); monthIdx = first.getMonth();
   const dd = misFindSheet_(ss, [MISC.DATA_TAB.toLowerCase()], true);
   const msgs = [];
   if (!dd) {
     msgs.push('ERROR: "' + MISC.DATA_TAB + '" tab nahi mila.');
   } else {
     const values = dd.getDataRange().getValues();
-    MISC.TABS.forEach(t => {
-      const mis = misFindSheet_(ss, t.words, false);
-      if (!mis) { msgs.push('ERROR: tab nahi mila: "' + t.label + '"'); return; }
-      try {
-        msgs.push(fillOneMis_(mis, t, misAggregate_(values, year, monthIdx, t.measure), year, monthIdx));
-      } catch (e) { msgs.push('ERROR [' + t.label + ']: ' + e.message); }
+    list.forEach(ym => {
+      const first = new Date(ym[0], ym[1], 1);
+      const year = first.getFullYear(), monthIdx = first.getMonth();
+      MISC.TABS.forEach(t => {
+        const mis = misFindSheet_(ss, t.words, false);
+        if (!mis) { msgs.push('ERROR: tab nahi mila: "' + t.label + '"'); return; }
+        try {
+          msgs.push(fillOneMis_(mis, t, misAggregate_(values, year, monthIdx, t.measure), year, monthIdx));
+        } catch (e) { msgs.push('ERROR [' + t.label + ']: ' + e.message); }
+      });
     });
   }
   const msg = msgs.join('\n\n');
