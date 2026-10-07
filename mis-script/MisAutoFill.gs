@@ -234,7 +234,7 @@ function misAggregate_(values, year, monthIdx, measure) {
     const key = String(row[iU]).trim().toUpperCase();
     const cat = misCatOf_(key);
     a.cats[cat] = (a.cats[cat] || 0) + rev;
-    if (key) a.skus[key] = (a.skus[key] || 0) + rev;
+    if (key) a.skus[key] = (a.skus[key] || 0) + rev; else a.restSku += rev;
   }
   return a;
 }

@@ -15,7 +15,7 @@ const HC = {
   TABS: [
     { name: 'MIS as per 1 Total', words: ['mis', 'total'], measure: 'total', kind: 'dash' },
     { name: 'MIS as per ITEM PRICE', words: ['mis', 'item'], measure: 'item price', kind: 'dash' },
-    { name: 'MIS as per RO', key: 'misasperro', measure: 'total', kind: 'ro' }
+    { name: 'MIS as per RO', key: 'misasperro', measure: 'item price', kind: 'ro' }
   ],
   MASTER_KEY: 'misaspermasterdata'
 };

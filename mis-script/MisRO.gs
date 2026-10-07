@@ -12,7 +12,7 @@
 const RO = {
   TAB_KEY: 'misasperro',     // tab name ignoring spaces and capitals
   INVOICE_TAB_KEY: 'invoicelog',   // tab written by the Invoice tool's web app
-  MEASURE: 'total',
+  MEASURE: 'item price',     // the RO tab is on the ITEM PRICE basis (blank ITEM PRICE -> Total)
   SKIP_LABEL: 'blinkit',     // row that the Invoice tool owns
   BUYER_WORD: 'blink',       // invoices whose buyer contains this count as Blinkit
   INVOICE_VALUE: 'taxable',  // 'taxable' or 'total' (all your invoices have 0 GST, so same)
