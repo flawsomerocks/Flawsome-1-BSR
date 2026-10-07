@@ -130,35 +130,75 @@ function roInvoiceInfo_(ss) {
     return { err: 'Invoice Log ke headers samajh nahi aaye: ' + vals[hr].join(' | ') };
   }
   const data = vals.slice(hr + 1).filter(r => r.some(c => c !== '' && c !== null));
-  const dateIsReal = cDate >= 0 && data.length && data.every(r => r[cDate] === '' || roIsDate_(r[cDate]));
-  const keyIsText = cMonth >= 0 && data.length && data.every(r => r[cMonth] === '' || /^\d{4}-\d{2}$/.test(String(r[cMonth]).trim()));
-  if (!dateIsReal && !keyIsText) return { err: 'Invoice Log me date / month key ka format samajh nahi aaya' };
 
-  const expected = {};      // 'yyyy-m' -> sum
-  let activeText = 'Active';
+  // which column can be used for the month, and what kind of values does it hold?
+  let col = -1, kind = '';
+  const samples = [];
+  [cDate, cMonth].filter(c => c >= 0).forEach(c => {
+    if (col >= 0) return;
+    const cells = data.map(r => r[c]).filter(v => v !== '' && v !== null);
+    if (!cells.length) return;
+    samples.push(vals[hr][c] + ': ' + cells.slice(0, 3).map(v => (roIsDate_(v) ? 'DATE ' : typeof v + ' ') + String(v)).join(' | '));
+    if (cells.every(roIsDate_)) { col = c; kind = 'date'; }
+    else if (cells.every(v => typeof v === 'string' && /^\d{4}-\d{2}(-\d{2})?/.test(v.trim()))) { col = c; kind = 'iso'; }
+    else if (cells.every(v => typeof v === 'string' && /^[A-Za-z]{3,}[ -]\d{2,4}$/.test(v.trim()))) { col = c; kind = 'monyy'; }
+  });
+  if (col < 0) return { err: 'Invoice Log me date / month key ka format samajh nahi aaya. Namune -> ' + samples.join(' || ') };
+
+  const expected = {}, label = {};
+  let activeText = 'Active', unparsed = '';
   data.forEach(r => {
     const st = String(r[cStatus]).trim();
     if (roNorm_(st).indexOf('active') !== 0) return;
     activeText = st;
     if (roNorm_(r[cBuyer]).indexOf(RO.BUYER_WORD) < 0) return;
-    let y, m;
-    if (dateIsReal && roIsDate_(r[cDate])) { y = r[cDate].getFullYear(); m = r[cDate].getMonth(); }
-    else { const mm = String(r[cMonth]).trim().match(/^(\d{4})-(\d{2})$/); if (!mm) return; y = +mm[1]; m = +mm[2] - 1; }
-    const k = y + '-' + m;
+    const ym = roYm_(r[col]);
+    if (!ym) { unparsed = unparsed || String(r[col]); return; }
+    const k = ym.y + '-' + ym.m;
     expected[k] = (expected[k] || 0) + (Number(r[cValue]) || 0);
+    if (!label[k]) label[k] = String(r[col]).trim();
   });
+  if (unparsed) return { err: 'Invoice Log me ek tarikh padh nahi payi: "' + unparsed + '"' };
+
   const L = n => { let s = ''; while (n > 0) { const x = (n - 1) % 26; s = String.fromCharCode(65 + x) + s; n = Math.floor((n - 1) / 26); } return s; };
   const rng = c => "'" + sh.getName() + "'!$" + L(c + 1) + ':$' + L(c + 1);
   const common = ',' + rng(cStatus) + ',"' + activeText.replace(/"/g, '') + '",' + rng(cBuyer) + ',"*' + RO.BUYER_WORD.toUpperCase() + '*")';
   const formulaFor = (y, m) => {
     const d = 'DATE(' + y + ',' + (m + 1) + ',1)';
-    if (dateIsReal) {
-      return '=SUMIFS(' + rng(cValue) + ',' + rng(cDate) + ',">="&' + d + ',' + rng(cDate) + ',"<="&EOMONTH(' + d + ',0)' + common;
+    if (kind === 'date') {
+      return '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',">="&' + d + ',' + rng(col) + ',"<="&EOMONTH(' + d + ',0)' + common;
     }
-    const key = y + '-' + ('0' + (m + 1)).slice(-2);
-    return '=SUMIFS(' + rng(cValue) + ',' + rng(cMonth) + ',"' + key + '"' + common;
+    if (kind === 'iso') {
+      return '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',"' + y + '-' + ('0' + (m + 1)).slice(-2) + '*"' + common;
+    }
+    const lb = label[y + '-' + m];
+    return lb ? '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',"' + lb.replace(/"/g, '') + '"' + common : null;
   };
-  return { expected: expected, formulaFor: formulaFor };
+  return { expected: expected, formulaFor: formulaFor, kind: kind };
+}
+
+// year + month (0-based) from a Date, an ISO text, dd/mm/yyyy text or "Sep-26" style text
+function roYm_(v) {
+  if (roIsDate_(v)) return { y: v.getFullYear(), m: v.getMonth() };
+  const s = String(v).trim();
+  let x = s.match(/^(\d{4})[-\/.](\d{1,2})/);
+  if (x && +x[2] >= 1 && +x[2] <= 12) return { y: +x[1], m: +x[2] - 1 };
+  x = s.match(/^(\d{1,2})[-\/. ](\d{1,2})[-\/. ](\d{4})/);
+  if (x && +x[2] >= 1 && +x[2] <= 12) return { y: +x[3], m: +x[2] - 1 };
+  const MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  x = s.match(/^(?:\d{1,2}[ -])?([A-Za-z]{3,})[ ,-]+(\d{2,4})$/);
+  if (x) { const mi = MON.indexOf(x[1].slice(0, 3).toLowerCase()); if (mi >= 0) return { y: +x[2] < 100 ? 2000 + +x[2] : +x[2], m: mi }; }
+  return null;
+}
+
+// one click: shows what the Invoice Log really looks like (open "MIS Log" tab afterwards)
+function RO_INVOICE_DEBUG() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheets().find(s => roNorm_(s.getName()) === RO.INVOICE_TAB_KEY);
+  if (!sh) { misLog_(ss, 'RO DEBUG: Invoice Log tab nahi mila'); return; }
+  const v = sh.getRange(1, 1, Math.min(sh.getLastRow(), 4), sh.getLastColumn()).getValues();
+  const t = x => (roIsDate_(x) ? 'DATE ' : typeof x + ' ') + String(x);
+  misLog_(ss, 'RO DEBUG Invoice Log:\n' + v.map((r, i) => 'row ' + (i + 1) + ': ' + r.map(t).join(' | ')).join('\n'));
 }
 
 // writes the formula, checks that the sheet's own answer equals the script's sum, otherwise removes it
@@ -167,7 +207,9 @@ function roFillBlinkitFromInvoices_(tab, cell, y, m) {
   if (info.err) return 'Blinkit cell khaali: ' + info.err + '. (Invoice tool me "Sync now" dabao.)';
   const exp = info.expected[y + '-' + m] || 0;
   if (!(exp > 0)) return 'Blinkit cell khaali: is mahine ka koi active Blinkit invoice nahi.';
-  cell.setFormula(info.formulaFor(y, m));
+  const f = info.formulaFor(y, m);
+  if (!f) return 'Blinkit cell khaali: is mahine ka formula nahi ban paya. (Invoice tool me "Sync now" dabao.)';
+  cell.setFormula(f);
   SpreadsheetApp.flush();
   const got = Number(cell.getValue());
   if (isFinite(got) && Math.abs(got - exp) < 1) {
