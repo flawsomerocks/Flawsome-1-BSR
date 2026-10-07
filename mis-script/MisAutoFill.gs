@@ -1,23 +1,22 @@
 /**
- * MIS AUTO FILL  (put this in the "MIS DEEP ANALISIS" sheet: Extensions > Apps Script)
- * Reads tab "DashData" (IMPORTRANGE from the sales sheet) and fills one month column of tab "MIS":
- *   Revenue (=SUM of channel rows), Units Sold, Channel Wise, Product Wise, SKU Wise.
- * Marketing Spends / Platform Margin / Opex etc. are NOT in DashData -> fill those by hand.
- * Runs by itself on the 7th of every month (previous month) after installMisTrigger().
+ * MIS AUTO FILL  -  ONE FILE, paste this whole thing in the "MIS DEEP ANALISIS" sheet
+ * (Extensions > Apps Script), Save, run  START_HERE  once.  That's it.
+ *
+ * Reads tab "DashData" and fills one month column in BOTH MIS tabs:
+ *   "MIS as per 1 Total"      <- DashData "Total" column
+ *   "MIS as per ITEM PRICE"   <- DashData "ITEM PRICE" column (blank -> Total is used)
+ * Fills: Revenue (=SUM of channel rows), Units Sold, Channel / Product / SKU split.
+ * NOT filled (not in DashData): Marketing Spends, Platform Margin, Opex -> manual.
+ * Auto-runs on the 7th of every month (fills the previous month).
  */
 const MISC = {
-  DATA: 'DashData',
-  // each MIS tab and which DashData column feeds its revenue
+  DATA_TAB: 'DashData',
+  // tab found by words in its name (case-insensitive), so small spelling changes are ok
   TABS: [
-    { name: 'MIS as per 1 Total', measure: 'total' },
-    { name: 'MIS as per ITEM PRICE', measure: 'item price' }   // blank ITEM PRICE -> Total is used
+    { label: 'MIS as per 1 Total', words: ['mis', 'total'], measure: 'total' },
+    { label: 'MIS as per ITEM PRICE', words: ['mis', 'item'], measure: 'item price' }
   ],
-  HEADER_ROW: 2,       // row with month headers in MIS
-  FIRST_MONTH_COL: 3,  // column C
-  REV_ROW: 4,
-  UNITS_ROW: 18,
-  FORMULA_ROWS: [6, 8, 11, 13, 14, 16],  // copied from previous month column when a new column is created
-  // MIS channel label (col B, lowercase) -> DashData Portal names (lowercase)
+  // MIS channel label -> DashData "Portal" names
   CHANNELS: {
     'amazon': ['amz fba', 'amazon vendor', 'amazon dropship'],
     'flipkart': ['flipkart'], 'myntra': ['myntra'], 'snapdeal': ['snapdeal'],
@@ -31,28 +30,34 @@ const MISC = {
     plCotton: 'panty liner cotton based', plPlant: 'panty liner plant based',
     pants: 'period pants', combos: 'combos'
   },
-  REST_SKU: "rest sku's (combo's)"
+  REV: 'revenue', UNITS: 'units sold', REST_SKU: "rest sku's (combo's)",
+  FORMULA_LABELS: ['cogs', 'cm1', 'platform margin', 'cm2', 'cm2 %', 'roas (blended)']
 };
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('📊 MIS')
-    .addItem('Fill previous month', 'fillPreviousMonth')
+    .addItem('START HERE (fill last month + auto-run 7th)', 'START_HERE')
+    .addItem('Fill previous month only', 'fillPreviousMonth')
     .addItem('Fill a specific month…', 'fillSpecificMonth')
-    .addItem('Auto-run on 7th of every month', 'installMisTrigger')
     .addToUi();
 }
 
-function installMisTrigger() {
+// run this once: fills last month and sets the 7th-of-month trigger
+function START_HERE() {
+  installMisTrigger_();
+  fillPreviousMonth();
+}
+
+function installMisTrigger_() {
   ScriptApp.getProjectTriggers().forEach(t => {
     if (t.getHandlerFunction() === 'fillPreviousMonth') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('fillPreviousMonth').timeBased().onMonthDay(7).atHour(9).create();
-  try { SpreadsheetApp.getUi().alert('Done: har mahine ki 7 tarik ~9am previous month MIS me fill hoga.'); } catch (e) {}
 }
 
 function fillPreviousMonth() {
   const n = new Date();
-  fillMis_(n.getFullYear(), n.getMonth() - 1);   // JS handles -1 => December of last year
+  fillMis_(n.getFullYear(), n.getMonth() - 1);
 }
 
 function fillSpecificMonth() {
@@ -66,71 +71,88 @@ function fillSpecificMonth() {
 
 function fillMis_(year, monthIdx) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const dd = ss.getSheetByName(MISC.DATA);
-  if (!dd) throw new Error('"' + MISC.DATA + '" tab nahi mila.');
   const first = new Date(year, monthIdx, 1);
   year = first.getFullYear(); monthIdx = first.getMonth();
-  const values = dd.getDataRange().getValues();
-
+  const dd = misFindSheet_(ss, [MISC.DATA_TAB.toLowerCase()], true);
   const msgs = [];
-  MISC.TABS.forEach(t => {
-    const mis = ss.getSheetByName(t.name);
-    if (!mis) { msgs.push('TAB NAHI MILA: "' + t.name + '"'); return; }
-    msgs.push(fillOneMis_(mis, t, misAggregate_(values, year, monthIdx, t.measure), year, monthIdx));
-  });
+  if (!dd) {
+    msgs.push('ERROR: "' + MISC.DATA_TAB + '" tab nahi mila.');
+  } else {
+    const values = dd.getDataRange().getValues();
+    MISC.TABS.forEach(t => {
+      const mis = misFindSheet_(ss, t.words, false);
+      if (!mis) { msgs.push('ERROR: tab nahi mila: "' + t.label + '"'); return; }
+      try {
+        msgs.push(fillOneMis_(mis, t, misAggregate_(values, year, monthIdx, t.measure), year, monthIdx));
+      } catch (e) { msgs.push('ERROR [' + t.label + ']: ' + e.message); }
+    });
+  }
   const msg = msgs.join('\n\n');
   Logger.log(msg);
-  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { ss.toast('MIS filled', 'MIS', 5); }
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { ss.toast(msg.slice(0, 200), 'MIS', 10); }
 }
 
 function fillOneMis_(mis, tab, agg, year, monthIdx) {
-  let c = misFindMonthCol_(mis, year, monthIdx);
+  const title = '[' + mis.getName() + '] ' + (monthIdx + 1) + '/' + year;
+  if (!agg.rows) return title + '\nDashData me is mahine ka data nahi mila. Kuch nahi likha.';
+
+  const hr = misHeaderRow_(mis);
+  let c = misFindMonthCol_(mis, hr, year, monthIdx);
   let created = false;
-  if (!c) { c = misInsertMonthCol_(mis, year, monthIdx); created = true; }
-  const L = colToLetter_(c);
+  if (!c) { c = misInsertMonthCol_(mis, hr, year, monthIdx); created = true; }
+  const L = misColLetter_(c);
 
-  // ---- write rows (found by label in col B) ----
-  const lastRow = mis.getLastRow();
-  const grid = mis.getRange(1, 1, lastRow, 4).getValues();   // columns A-D
+  // row finder: label can sit in any of columns A-D; SKU rows by SKU code (FSPCL10 ...)
+  const grid = mis.getRange(1, 1, mis.getLastRow(), 4).getValues();
   const rowOf = {}, skuRows = {};
-  grid.forEach((r, i) => {
-    const t = String(r[1]).trim().toLowerCase();
+  grid.forEach((r, i) => r.forEach(cell => {
+    const t = String(cell).trim().toLowerCase();
     if (t && rowOf[t] === undefined) rowOf[t] = i + 1;
-    // SKU rows are found by the SKU code written next to the product name (FSPCL10, FPPL4 ...)
-    r.forEach(cell => {
-      const code = String(cell).trim().toUpperCase();
-      if (/^F[A-Z]+\d+$/.test(code) && !skuRows[code]) skuRows[code] = i + 1;
-    });
-  });
+    const code = t.toUpperCase();
+    if (/^F[A-Z]+\d+$/.test(code) && !skuRows[code]) skuRows[code] = i + 1;
+  }));
 
-  const put = (row, v) => { if (row) mis.getRange(row, c).setValue(Math.round(v * 100) / 100); };
+  const missing = [];
+  const put = (label, v) => {
+    const row = rowOf[label];
+    if (!row) { missing.push(label); return; }
+    mis.getRange(row, c).setValue(Math.round(v * 100) / 100);
+  };
   let chFirst = 1e9, chLast = 0;
   Object.keys(MISC.CHANNELS).forEach(k => {
-    const row = rowOf[k];
-    if (!row) return;
-    chFirst = Math.min(chFirst, row); chLast = Math.max(chLast, row);
-    put(row, agg.channels[k] || 0);
+    if (rowOf[k]) { chFirst = Math.min(chFirst, rowOf[k]); chLast = Math.max(chLast, rowOf[k]); }
+    put(k, agg.channels[k] || 0);
   });
-  Object.keys(MISC.CATS).forEach(k => put(rowOf[MISC.CATS[k]], agg.cats[k] || 0));
-  Object.keys(skuRows).forEach(k => put(skuRows[k], agg.skus[k] || 0));
-  // SKUs that have no row in MIS (e.g. panty liner 60) go to the "Rest SKU" row
+  Object.keys(MISC.CATS).forEach(k => put(MISC.CATS[k], agg.cats[k] || 0));
+  Object.keys(skuRows).forEach(k => mis.getRange(skuRows[k], c).setValue(Math.round((agg.skus[k] || 0) * 100) / 100));
   Object.keys(agg.skus).forEach(k => { if (!skuRows[k]) agg.restSku += agg.skus[k]; });
-  put(rowOf[MISC.REST_SKU], agg.restSku);
-  put(MISC.UNITS_ROW, agg.units);
-  if (chLast) mis.getRange(MISC.REV_ROW, c).setFormula('=SUM(' + L + chFirst + ':' + L + chLast + ')');
+  put(MISC.REST_SKU, agg.restSku);
+  put(MISC.UNITS, agg.units);
+  if (chLast && rowOf[MISC.REV]) mis.getRange(rowOf[MISC.REV], c).setFormula('=SUM(' + L + chFirst + ':' + L + chLast + ')');
+  else missing.push(MISC.REV);
+
+  if (created) {   // new column: copy the formulas of the previous month column (COGS, CM1 ...)
+    MISC.FORMULA_LABELS.forEach(lb => {
+      const row = rowOf[lb];
+      if (!row) return;
+      const f = mis.getRange(row, c - 1).getFormulaR1C1();
+      if (f) mis.getRange(row, c).setFormulaR1C1(f);
+    });
+  }
 
   return [
-    '[' + tab.name + '] ' + (monthIdx + 1) + '/' + year + ' -> column ' + L + (created ? ' (new column)' : ''),
-    'Rows: ' + agg.rows + ' | Revenue: ' + Math.round(agg.revenue) + ' | Units: ' + agg.units,
-    agg.fallbackRows ? 'ITEM PRICE khaali tha, Total use hua: ' + agg.fallbackRows + ' rows (' + Math.round(agg.fallbackAmt) + ')' : '',
-    Object.keys(agg.unmappedPortals).length ? 'Portal MIS me nahi hai (channel split me nahi gaya): ' +
+    title + ' -> column ' + L + (created ? ' (naya column banaya)' : ' (purana column update)'),
+    'Rows: ' + agg.rows + ' | Revenue(DashData): ' + Math.round(agg.revenue) + ' | Units: ' + agg.units,
+    agg.fallbackRows ? 'ITEM PRICE khaali tha -> Total use hua: ' + agg.fallbackRows + ' rows (' + Math.round(agg.fallbackAmt) + ')' : '',
+    Object.keys(agg.unmappedPortals).length ? 'Ye portal MIS me nahi hai (channel split me nahi gaya): ' +
       Object.keys(agg.unmappedPortals).map(p => p + '=' + Math.round(agg.unmappedPortals[p])).join(', ') : '',
+    missing.length ? 'MIS me ye row nahi mili (skip): ' + missing.join(', ') : '',
     'Rest SKU (combos / unmatched): ' + Math.round(agg.restSku),
     'Manual bharna hai: Marketing Spends, Platform Margin, Opex.'
   ].filter(Boolean).join('\n');
 }
 
-// ---------- pure logic (no Sheets calls) ----------
+// ---------- calculation (no Sheets calls) ----------
 function misAggregate_(values, year, monthIdx, measure) {
   const head = values[0].map(h => String(h).trim().toLowerCase());
   const ix = n => head.indexOf(n);
@@ -165,8 +187,8 @@ function misAggregate_(values, year, monthIdx, measure) {
   return a;
 }
 
-// category from SKU code: FPLPLA.. panty liner plant, FPLC.. panty liner cotton, FPP.. period pants,
-// FSPC.. pads cotton, FSPP.. pads plant, anything else = combos
+// FPLPLA.. panty liner plant | FPLC.. panty liner cotton | FPP.. period pants
+// FSPC.. pads cotton | FSPP.. pads plant | anything else = combos
 function misCatOf_(code) {
   if (code.indexOf('FPLPLA') === 0) return 'plPlant';
   if (code.indexOf('FPLC') === 0) return 'plCotton';
@@ -177,39 +199,50 @@ function misCatOf_(code) {
 }
 
 // ---------- sheet helpers ----------
-// Header cells are dates typed like "May-26" (read as 26-May) or real month dates (1-Jun-2026)
+function misFindSheet_(ss, words, exact) {
+  const sheets = ss.getSheets();
+  for (const s of sheets) {
+    const n = s.getName().toLowerCase();
+    if (exact ? n.trim() === words[0] : words.every(w => n.indexOf(w) >= 0)) return s;
+  }
+  return null;
+}
+
+// header row = first of rows 1-6 whose column A says "Month" (default 2)
+function misHeaderRow_(mis) {
+  const a = mis.getRange(1, 1, 6, 1).getValues();
+  for (let i = 0; i < a.length; i++) if (String(a[i][0]).trim().toLowerCase() === 'month') return i + 1;
+  return 2;
+}
+
+// month headers are dates typed like "May-26" (read as 26-May) or real month dates (1-Jun-2026)
 function misHeaderToYm_(v) {
   if (!(v instanceof Date) || isNaN(v.getTime())) return null;
   const day = v.getDate();
   return { y: day === 1 ? v.getFullYear() : 2000 + day, m: v.getMonth() };
 }
 
-function misFindMonthCol_(mis, y, m) {
-  const hdr = mis.getRange(MISC.HEADER_ROW, 1, 1, mis.getLastColumn()).getValues()[0];
-  for (let i = MISC.FIRST_MONTH_COL - 1; i < hdr.length; i++) {
+function misFindMonthCol_(mis, hr, y, m) {
+  const hdr = mis.getRange(hr, 1, 1, mis.getLastColumn()).getValues()[0];
+  for (let i = 2; i < hdr.length; i++) {
     const ym = misHeaderToYm_(hdr[i]);
     if (ym && ym.y === y && ym.m === m) return i + 1;
   }
   return 0;
 }
 
-function misInsertMonthCol_(mis, y, m) {
-  const hdr = mis.getRange(MISC.HEADER_ROW, 1, 1, mis.getLastColumn()).getValues()[0];
+function misInsertMonthCol_(mis, hr, y, m) {
+  const hdr = mis.getRange(hr, 1, 1, mis.getLastColumn()).getValues()[0];
   let tot = hdr.findIndex(h => String(h).trim().toLowerCase() === 'total') + 1;
   if (!tot) tot = mis.getLastColumn() + 1;
   mis.insertColumnBefore(tot);
-  const c = tot, src = c - 1;
-  mis.getRange(1, src, mis.getMaxRows(), 1)
-    .copyTo(mis.getRange(1, c, mis.getMaxRows(), 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
-  MISC.FORMULA_ROWS.forEach(r => {
-    const f = mis.getRange(r, src).getFormulaR1C1();
-    if (f) mis.getRange(r, c).setFormulaR1C1(f);
-  });
-  mis.getRange(MISC.HEADER_ROW, c).setValue(new Date(y, m, 1)).setNumberFormat('mmm-yy');
-  return c;
+  mis.getRange(1, tot - 1, mis.getMaxRows(), 1)
+    .copyTo(mis.getRange(1, tot, mis.getMaxRows(), 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  mis.getRange(hr, tot).setValue(new Date(y, m, 1)).setNumberFormat('mmm-yy');
+  return tot;
 }
 
-function colToLetter_(n) {
+function misColLetter_(n) {
   let s = '';
   while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
   return s;
