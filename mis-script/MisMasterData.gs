@@ -30,7 +30,7 @@ function MASTER_SETUP() {
   ss.toast('Master MIS ready. Report: "MIS Log" tab dekho', 'MIS', 10);
 }
 
-// daily trigger: only adds the running month column when a new month starts
+// daily trigger (~10am): adds the new month's column when a month starts; the numbers themselves are live formulas
 function masterDaily() {
   mmEnsureCurrentMonth_(SpreadsheetApp.getActiveSpreadsheet());
 }
@@ -131,19 +131,29 @@ function mmBuild_(ss) {
     'COGS 30% aur Platform Margin 30% default formula hai.';
 }
 
-// new month -> new column before Total (copies the previous month column). Old columns are never changed.
+// every month up to the running month gets a column (inserted before Total, in order, even if the trigger missed days).
+// Old columns are never changed.
 function mmEnsureCurrentMonth_(ss) {
   const sh = ss.getSheetByName(MM.TAB);
   if (!sh || sh.getLastColumn() < 5 || sh.getLastRow() < 5) return;
-  const n = new Date(), y = n.getFullYear(), m = n.getMonth(), hr = MM.HEADER_ROW;
-  if (mmFindMonthCol_(sh, hr, y, m)) return;
-  const hdr = sh.getRange(hr, 1, 1, sh.getLastColumn()).getValues()[0];
-  const tot = hdr.findIndex(h => String(h).trim().toLowerCase() === 'total') + 1;
-  if (!tot || tot < 5) return;
-  sh.insertColumnBefore(tot);
-  sh.getRange(1, tot - 1, sh.getMaxRows(), 1).copyTo(sh.getRange(1, tot, sh.getMaxRows(), 1));
-  sh.getRange(hr, tot).setValue(new Date(y, m, 1)).setNumberFormat('mmm-yy');
-  mmLog_(ss, '[' + MM.TAB + '] naya mahina ' + (m + 1) + '/' + y + ' column ' + mmColLetter_(tot) + ' me jodd diya.');
+  const hr = MM.HEADER_ROW, n = new Date();
+  const target = n.getFullYear() * 12 + n.getMonth();
+  let added = [];
+  for (let guard = 0; guard < 24; guard++) {
+    const hdr = sh.getRange(hr, 1, 1, sh.getLastColumn()).getValues()[0];
+    let tot = 0, last = -1;
+    hdr.forEach((h, i) => {
+      if (String(h).trim().toLowerCase() === 'total') tot = i + 1;
+      else if (i >= 3 && h instanceof Date && !isNaN(h.getTime())) last = Math.max(last, h.getFullYear() * 12 + h.getMonth());
+    });
+    if (!tot || tot < 5 || last < 0 || last >= target) break;
+    const next = last + 1, y = Math.floor(next / 12), m = next % 12;
+    sh.insertColumnBefore(tot);
+    sh.getRange(1, tot - 1, sh.getMaxRows(), 1).copyTo(sh.getRange(1, tot, sh.getMaxRows(), 1));
+    sh.getRange(hr, tot).setValue(new Date(y, m, 1)).setNumberFormat('mmm-yy');
+    added.push((m + 1) + '/' + y + ' (column ' + mmColLetter_(tot) + ')');
+  }
+  if (added.length) mmLog_(ss, '[' + MM.TAB + '] naya mahina jodda: ' + added.join(', '));
 }
 
 function mmFindMonthCol_(sh, hr, y, m) {
