@@ -21,7 +21,7 @@ const DD = {
     { tab: 'FBA AMZ', label: 'AMZ FBA', m: { total: 10, item: 10 } },
     { tab: 'Flipkart(d-1)', label: 'Flipkart' },
     { tab: 'Snapdeal(d-1)', label: 'Snapdeal' },
-    { tab: 'Blinkit', label: 'Blinkit', m: { total: 9 } },
+    { tab: 'Blinkit', label: 'Blinkit' },
     { tab: 'Myntra(d-1)', label: 'Myntra' },
     { tab: 'Website', label: 'Website' },
     { tab: 'Swiggy', label: 'Swiggy' }
