@@ -200,7 +200,15 @@ function hcCheckTab_(ss, tab, spec, values, months, res) {
     }
     // units
     const ui = idx(MISC.UNITS);
-    if (ui >= 0 && Math.abs(num(ui) - agg.units) > HC.TOL) P(tag + 'Units ' + num(ui) + ', DashData ' + agg.units + '.');
+    let unitTarget = agg.units, uname = 'DashData';
+    if (spec.kind === 'ro' && typeof roInvoiceInfo_ === 'function' && typeof roBlinkitDash_ === 'function') {
+      const inf = roInvoiceInfo_(ss);
+      if (!inf.err && inf.qty && (inf.expected[y + '-' + m] || 0) > 0) {
+        unitTarget = agg.units - roBlinkitDash_(values, y, m).units + (inf.qty[y + '-' + m] || 0);
+        uname = 'DashData + invoice Qty';
+      }
+    }
+    if (ui >= 0 && Math.abs(num(ui) - unitTarget) > HC.TOL) P(tag + 'Units ' + num(ui) + ', ' + uname + ' ' + unitTarget + '.');
     // Blinkit from RO invoices
     if (spec.kind === 'ro' && blinkRow >= 0 && typeof roInvoiceInfo_ === 'function') {
       const info = roInvoiceInfo_(ss);

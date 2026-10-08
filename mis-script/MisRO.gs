@@ -188,11 +188,26 @@ function roItemSplit_(values, y, m, b) {
 }
 
 // moves the Blinkit part of agg (products / SKUs) from the DashData value to the invoice value V
-function roAllocateBlinkit_(values, y, m, agg, V) {
+function roBlinkitDash_(values, y, m) {
   const head = values[0].map(h => String(h).trim().toLowerCase());
   const iP = head.indexOf('portal');
   const only = [values[0]].concat(values.slice(1).filter(r => String(r[iP]).trim().toLowerCase() === RO.SKIP_LABEL));
-  const b = misAggregate_(only, y, m, RO.MEASURE);
+  return misAggregate_(only, y, m, RO.MEASURE);
+}
+
+// revenue split + Units: in months that have Blinkit invoices, Blinkit units = invoice Qty (not DashData units)
+function roAllocateBlinkit_(values, y, m, agg, V) {
+  const note = roAllocRevenue_(values, y, m, agg, V);
+  const inf = roInvoiceInfo_(SpreadsheetApp.getActiveSpreadsheet());
+  const key = y + '-' + m;
+  if (inf.err || !inf.qty || !((inf.expected[key] || 0) > 0)) return note;
+  const b = roBlinkitDash_(values, y, m), q = inf.qty[key] || 0;
+  agg.units += q - b.units;
+  return note + ' Units: Blinkit ' + b.units + ' -> invoice Qty ' + q + '.';
+}
+
+function roAllocRevenue_(values, y, m, agg, V) {
+  const b = roBlinkitDash_(values, y, m);
 
   const it = V > 0 ? roItemSplit_(values, y, m, b) : null;
   if (it && !it.err && it.lines > 0) {
@@ -248,6 +263,7 @@ function roInvoiceInfo_(ss) {
   let cValue = RO.INVOICE_VALUE === 'taxable' ? find(h => h.indexOf('taxable') >= 0) : -1;
   if (cValue < 0) cValue = find(h => h === 'total' || h === 'invoicetotal' || h === 'totalamount' || h === 'amount');
   const cDate = find(h => h === 'invoicedate' || h === 'date');
+  const cQty = find(h => h === 'qty' || h === 'quantity');
   const cInvNo = find(h => /^invoice(no|number)$|^invno$|^invoice$/.test(h));
   const cKey = find(h => h === 'monthkey');
   const cMonth = find(h => h.indexOf('month') >= 0 && h !== 'monthkey');
@@ -271,7 +287,7 @@ function roInvoiceInfo_(ss) {
   });
   if (col < 0) return { err: 'Invoice Log me date / month key ka format samajh nahi aaya. Namune -> ' + samples.join(' || ') };
 
-  const expected = {}, label = {}, inv = {};
+  const expected = {}, label = {}, inv = {}, qty = {};
   let activeText = 'Active', unparsed = '';
   data.forEach(r => {
     const st = String(r[cStatus]).trim();
@@ -283,6 +299,7 @@ function roInvoiceInfo_(ss) {
     const k = ym.y + '-' + ym.m;
     expected[k] = (expected[k] || 0) + (Number(r[cValue]) || 0);
     if (cInvNo >= 0) inv[roNorm_(r[cInvNo])] = k;
+    if (cQty >= 0) qty[k] = (qty[k] || 0) + (Number(r[cQty]) || 0);
     if (!label[k]) label[k] = String(r[col]).trim();
   });
   if (unparsed) return { err: 'Invoice Log me ek tarikh padh nahi payi: "' + unparsed + '"' };
@@ -304,7 +321,7 @@ function roInvoiceInfo_(ss) {
     const lb = label[y + '-' + m];
     return lb ? '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',"' + lb.replace(/"/g, '') + '"' + common : null;
   };
-  return { expected: expected, formulaFor: formulaFor, kind: kind, inv: cInvNo >= 0 ? inv : null };
+  return { expected: expected, formulaFor: formulaFor, kind: kind, inv: cInvNo >= 0 ? inv : null, qty: cQty >= 0 ? qty : null };
 }
 
 // year + month (0-based) from a Date, an ISO text, dd/mm/yyyy text or "Sep-26" style text
@@ -348,4 +365,28 @@ function roFillBlinkitFromInvoices_(tab, cell, y, m) {
   }
   cell.clearContent();
   return 'Blinkit cell khaali chhoda: formula ka jawab (' + got + ') invoices ke total (' + Math.round(exp) + ') se match nahi hua. Invoice tool me "Sync now" dabao.';
+}
+
+function RO_REFILL_ALL() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const dd = misFindSheet_(ss, [MISC.DATA_TAB.toLowerCase()], true);
+  if (!dd) { misLog_(ss, 'RO ERROR: "' + MISC.DATA_TAB + '" tab nahi mila.'); return; }
+  const list = misMonthsFrom_(dd.getDataRange().getValues()).map(d => [d.getFullYear(), d.getMonth()]);
+  const n = new Date();
+  list.push([n.getFullYear(), n.getMonth()]);
+  const props = PropertiesService.getScriptProperties();
+  let i = Number(props.getProperty('RO_REFILL_I') || 0);
+  if (i >= list.length) i = 0;
+  const t0 = Date.now();
+  for (; i < list.length; i++) {
+    if (Date.now() - t0 > 240000) break;
+    roFill_([list[i]]);
+  }
+  if (i >= list.length) {
+    props.deleteProperty('RO_REFILL_I');
+    misLog_(ss, 'RO_REFILL_ALL: SAB DONE. ' + list.length + ' mahine MIS as per RO me dobara bhare.');
+  } else {
+    props.setProperty('RO_REFILL_I', String(i));
+    misLog_(ss, 'RO_REFILL_ALL: ' + i + ' / ' + list.length + ' mahine ho gaye. Dobara RO_REFILL_ALL run karo.');
+  }
 }
