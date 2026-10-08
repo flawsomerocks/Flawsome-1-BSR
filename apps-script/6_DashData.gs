@@ -13,10 +13,10 @@ const DD = {
     { tab: '1MG(d-1)', label: '1MG' },
     { tab: 'smytten(d-1)', label: 'Smytten' },
     { tab: 'Pharmeasy(d-1)', label: 'Pharmeasy', m: { total: 8, item: 8 } },
-    { tab: 'Meesho(d-1)', label: 'Meesho', m: { total: 6, item: 6 } },
+    { tab: 'Meesho(d-1)', label: 'Meesho', m: { item: 8 }, totalFromAsp: true },
     { tab: 'Tatacliq', label: 'Tatacliq' },
-    { tab: 'POP', label: 'POP', m: { total: 6, item: 6 } },
-    { tab: 'Amazon Vendor central(d-2)', label: 'Amazon Vendor' },
+    { tab: 'POP', label: 'POP', m: { item: 8 }, totalFromAsp: true },
+    { tab: 'Amazon Vendor central(d-2)', label: 'Amazon Vendor', m: { item: 8 } },
     { tab: 'Amazon Dropship(d-1)', label: 'Amazon Dropship' },
     { tab: 'FBA AMZ', label: 'AMZ FBA', m: { total: 10, item: 10 } },
     { tab: 'Flipkart(d-1)', label: 'Flipkart' },
@@ -48,7 +48,8 @@ function buildDashData() {
       if (usku === '' && psku === '') return;
       const date = ddDate_(ddGet_(r, m.date));
       const month = date ? new Date(date.getFullYear(), date.getMonth(), 1) : '';
-      const total = ddNum_(ddGet_(r, m.total));
+      let total = ddNum_(ddGet_(r, m.total));
+      if (cfg.totalFromAsp) total = (Number(ddNum_(ddGet_(r, m.asp))) || 0) * (Number(ddNum_(ddGet_(r, m.qty))) || 0);
       if (!date) noDate++;
       sum += Number(total) || 0;
       n++;
@@ -56,8 +57,7 @@ function buildDashData() {
         ddNum_(ddGet_(r, m.asp)), cfg.label, total, ddNum_(ddGet_(r, m.item))]);
     });
     report.push(cfg.label + ': ' + n + ' rows, total ' + Math.round(sum) + ', without date ' + noDate +
-      ' | Total=col "' + hn(m.total) + '" Item=col "' + hn(m.item) + '"' +
-      (/total/i.test(hn(m.total)) && /item/i.test(hn(m.item)) ? '' : '  <-- CHECK column'));
+      ' | Total=' + (cfg.totalFromAsp ? 'Asp x Qty' : 'col "' + hn(m.total) + '"') + ' Item=col "' + hn(m.item) + '"');
   });
 
   rows.sort((a, b) => (a[1] ? a[1].getTime() : 0) - (b[1] ? b[1].getTime() : 0));
