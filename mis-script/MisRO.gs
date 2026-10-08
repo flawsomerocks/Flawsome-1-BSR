@@ -111,24 +111,123 @@ function roFillMonth_(tab, values, y, m) {
 }
 
 // moves the Blinkit part of agg (products / SKUs) from the DashData value to the invoice value V
+// invoice item name -> SKU. Add a line here when Blinkit gets a new product. "A|B" = split A / B by Blinkit's own DashData share.
+const RO_ITEM_MAP = [
+  ['Flawsome Ultra Soft Sanitary Pads (L) (Box) (1 pack (10 pcs))', 'FSPPLAL10'],
+  ['Flawsome 100% Organic Cotton Sanitary Pads (L) (Box) (1 pack (10 pcs))', 'FSPCL10'],
+  ['Flawsome Ultra Absorbent Sanitary Pads (XL) (Box) (1 pack (10 pcs))', 'FSPCXL10'],
+  ['Flawsome Sanitary Pads for Heavy Flow (XXL) (Box) (1 pack (10 pcs))', 'FSPCXXL10'],
+  ['Flawsome Disposable Period Panty (Box) (4 pcs)', 'FPPL4|FPPXL4'],
+  ['Flawsome Full 360° Disposable Period Panty (Box) (4 pcs)', 'FPPXL4'],
+  ['Flawsome 100% Organic Panty Liners (Box) (30 pcs)', 'FPLC30'],
+  ['Flawsome Sanitary Pads (L) (Box) (1 pack (20 pcs))', 'FSPCL20'],
+  ['Flawsome Sanitary Pads (Box) (20 pcs)', 'FSPPLAL20'],
+  ['Flawsome Sanitary Pads (Box) (30 pcs)', 'FSPPLAL30'],
+  ['Flawsome 100% Organic Cotton Sanitary Pads (L) (Box) (1 pack (30 pcs))', 'FSPCL30'],
+  ['Flawsome 100% Organic Sanitary Pads (With Paper Disposal Pouches, XL) (Box) (1 pack (20 pcs))', 'FSPCXL20'],
+  ['Flawsome 100% Organic Sanitary Pads (With Paper Disposal Pouches, XL) (Box) (1 pack (30 pcs))', 'FSPCXL30'],
+  ['Flawsome 100% Organic Sanitary Pads (With Paper Disposal Pouches, XXL) (Box) (1 pack (20 pcs))', 'FSPCXXL20'],
+  ['Flawsome 100% Organic Sanitary Pads (With Paper Disposal Pouches, XXL) (Box) (1 pack (30 pcs))', 'FSPCXXL30']
+];
+
+function roKey_(s) {
+  return String(s === null || s === undefined ? '' : s).toLowerCase().replace(/pieces|piece/g, 'pcs').replace(/[^a-z0-9]/g, '');
+}
+
+// Blinkit invoice lines of month (y, m) -> value per SKU. Item ID is used when the Items Log has it, else the item name.
+function roItemSplit_(values, y, m, b) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const info = roInvoiceInfo_(ss);
+  if (info.err) return { err: info.err };
+  if (!info.inv) return { err: 'Invoice Log me invoice number column nahi mila' };
+  const sh = ss.getSheets().find(s => roNorm_(s.getName()).indexOf('invoiceitems') === 0);
+  if (!sh) return { err: 'Invoice Items Log tab nahi mila' };
+  const vals = sh.getDataRange().getValues();
+  let hr = -1, cDesc = -1, cId = -1, cInv = -1, cVal = -1;
+  for (let i = 0; i < Math.min(vals.length, 6) && hr < 0; i++) {
+    const h = vals[i].map(roNorm_);
+    const d = h.findIndex(x => /desc|itemname|particular|^item$|^product$/.test(x));
+    const n = h.findIndex(x => /^invoice(no|number)$|^invno$|^invoice$/.test(x));
+    if (d >= 0 && n >= 0) {
+      hr = i; cDesc = d; cInv = n;
+      cId = h.findIndex(x => /^itemid$|^itemcode$|^blinkitid$|^portalsku$/.test(x));
+      cVal = h.findIndex(x => x.indexOf('taxable') >= 0);
+      if (cVal < 0) cVal = h.findIndex(x => /^(amount|total|itemtotal|lineamount|lineamt|value)$/.test(x));
+    }
+  }
+  if (hr < 0 || cVal < 0) return { err: 'Invoice Items Log ke headers samajh nahi aaye: ' + (vals[0] || []).join(' | ') };
+
+  const byId = {};
+  const head = values[0].map(h => String(h).trim().toLowerCase());
+  const iP = head.indexOf('portal'), iPs = head.indexOf('portal sku'), iS = head.indexOf('sku');
+  for (let r = 1; r < values.length; r++) {
+    if (String(values[r][iP]).trim().toLowerCase() !== RO.SKIP_LABEL) continue;
+    const sk = String(values[r][iS]).trim().toUpperCase();
+    if (sk) byId[String(values[r][iPs]).trim()] = sk;
+  }
+  const byName = {};
+  RO_ITEM_MAP.forEach(x => { byName[roKey_(x[0])] = x[1]; });
+
+  const skus = {}, unmapped = {};
+  let rest = 0, lines = 0;
+  const key = y + '-' + m;
+  vals.slice(hr + 1).forEach(r => {
+    if (info.inv[roNorm_(r[cInv])] !== key) return;
+    const v = Number(r[cVal]) || 0;
+    lines++;
+    let sku = cId >= 0 ? (byId[String(r[cId]).trim()] || '') : '';
+    if (!sku) sku = byName[roKey_(r[cDesc])] || '';
+    if (!sku) { rest += v; unmapped[String(r[cDesc])] = (unmapped[String(r[cDesc])] || 0) + v; return; }
+    const parts = sku.split('|');
+    if (parts.length === 1) { skus[sku] = (skus[sku] || 0) + v; return; }
+    const w = parts.map(p => (b.skus[p] || 0));
+    const tot = w.reduce((a, x) => a + x, 0);
+    parts.forEach((p, i) => { skus[p] = (skus[p] || 0) + v * (tot > 0 ? w[i] / tot : 1 / parts.length); });
+  });
+  return { skus: skus, rest: rest, unmapped: unmapped, lines: lines };
+}
+
+// moves the Blinkit part of agg (products / SKUs) from the DashData value to the invoice value V
 function roAllocateBlinkit_(values, y, m, agg, V) {
   const head = values[0].map(h => String(h).trim().toLowerCase());
   const iP = head.indexOf('portal');
   const only = [values[0]].concat(values.slice(1).filter(r => String(r[iP]).trim().toLowerCase() === RO.SKIP_LABEL));
   const b = misAggregate_(only, y, m, RO.MEASURE);
+
+  const it = V > 0 ? roItemSplit_(values, y, m, b) : null;
+  if (it && !it.err && it.lines > 0) {
+    Object.keys(b.skus).forEach(s => { agg.skus[s] = (agg.skus[s] || 0) - b.skus[s]; });
+    Object.keys(b.cats).forEach(c => { agg.cats[c] = (agg.cats[c] || 0) - b.cats[c]; });
+    agg.restSku -= b.restSku;
+    let sum = it.rest, rest = it.rest;
+    Object.keys(it.skus).forEach(s => {
+      agg.skus[s] = (agg.skus[s] || 0) + it.skus[s];
+      const c = misCatOf_(s);
+      agg.cats[c] = (agg.cats[c] || 0) + it.skus[s];
+      sum += it.skus[s];
+    });
+    const diff = V - sum;
+    rest += diff;
+    agg.restSku += rest;
+    agg.cats.combos = (agg.cats.combos || 0) + rest;
+    const un = Object.keys(it.unmapped).map(k => k + '=' + Math.round(it.unmapped[k])).join('; ');
+    return 'Split: Blinkit invoice ki ' + it.lines + ' item lines se (invoice ' + Math.round(V) + ').' +
+      (un ? ' SKU nahi mili (Rest SKU me gaya): ' + un + '.' : '') +
+      (Math.abs(diff) >= 1 ? ' Lines ka total invoice se ' + Math.round(diff) + ' alag, Rest SKU me gaya.' : '');
+  }
+
+  const why = it && it.err ? ' (Items Log: ' + it.err + ')' : '';
   if (!(b.revenue > 0)) {
     if (V > 0) { agg.restSku += V; agg.cats.combos = (agg.cats.combos || 0) + V; }
-    return 'Split: Blinkit DashData me nahi, invoice ' + Math.round(V) + ' Rest SKU / Combos me gaya.';
+    return 'Split: Blinkit DashData me nahi, invoice ' + Math.round(V) + ' Rest SKU / Combos me gaya.' + why;
   }
   const k = V / b.revenue - 1;
   Object.keys(b.skus).forEach(s => { agg.skus[s] = (agg.skus[s] || 0) + b.skus[s] * k; });
   Object.keys(b.cats).forEach(c => { agg.cats[c] = (agg.cats[c] || 0) + b.cats[c] * k; });
   agg.restSku += b.restSku * k;
-  return 'Split: Blinkit DashData ' + Math.round(b.revenue) + ' -> invoice ' + Math.round(V) + ' (product/SKU me usi ratio se baanta).';
+  return 'Split: Blinkit DashData ' + Math.round(b.revenue) + ' -> invoice ' + Math.round(V) + ' (product/SKU me usi ratio se baanta).' + why;
 }
 
-
-// ---------- Blinkit cell from the "Invoice Log" tab (only when the cell is empty) ----------
 function roNorm_(v) { return String(v === null || v === undefined ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 function roIsDate_(v) { return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime()); }
 
@@ -149,6 +248,7 @@ function roInvoiceInfo_(ss) {
   let cValue = RO.INVOICE_VALUE === 'taxable' ? find(h => h.indexOf('taxable') >= 0) : -1;
   if (cValue < 0) cValue = find(h => h === 'total' || h === 'invoicetotal' || h === 'totalamount' || h === 'amount');
   const cDate = find(h => h === 'invoicedate' || h === 'date');
+  const cInvNo = find(h => /^invoice(no|number)$|^invno$|^invoice$/.test(h));
   const cKey = find(h => h === 'monthkey');
   const cMonth = find(h => h.indexOf('month') >= 0 && h !== 'monthkey');
   if (cBuyer < 0 || cValue < 0 || (cDate < 0 && cMonth < 0 && cKey < 0)) {
@@ -171,7 +271,7 @@ function roInvoiceInfo_(ss) {
   });
   if (col < 0) return { err: 'Invoice Log me date / month key ka format samajh nahi aaya. Namune -> ' + samples.join(' || ') };
 
-  const expected = {}, label = {};
+  const expected = {}, label = {}, inv = {};
   let activeText = 'Active', unparsed = '';
   data.forEach(r => {
     const st = String(r[cStatus]).trim();
@@ -182,6 +282,7 @@ function roInvoiceInfo_(ss) {
     if (!ym) { unparsed = unparsed || String(r[col]); return; }
     const k = ym.y + '-' + ym.m;
     expected[k] = (expected[k] || 0) + (Number(r[cValue]) || 0);
+    if (cInvNo >= 0) inv[roNorm_(r[cInvNo])] = k;
     if (!label[k]) label[k] = String(r[col]).trim();
   });
   if (unparsed) return { err: 'Invoice Log me ek tarikh padh nahi payi: "' + unparsed + '"' };
@@ -203,7 +304,7 @@ function roInvoiceInfo_(ss) {
     const lb = label[y + '-' + m];
     return lb ? '=SUMIFS(' + rng(cValue) + ',' + rng(col) + ',"' + lb.replace(/"/g, '') + '"' + common : null;
   };
-  return { expected: expected, formulaFor: formulaFor, kind: kind };
+  return { expected: expected, formulaFor: formulaFor, kind: kind, inv: cInvNo >= 0 ? inv : null };
 }
 
 // year + month (0-based) from a Date, an ISO text, dd/mm/yyyy text or "Sep-26" style text
