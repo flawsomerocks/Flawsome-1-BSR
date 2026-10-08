@@ -5,14 +5,14 @@ const DD = {
   // default column positions (0 = A). Override per tab with m:{...} if a tab is different.
   DEF: { month: 0, date: 1, psku: 2, usku: 3, qty: 4, sku: 5, asp: 6, total: 8, item: 9 },
   SHEETS: [
-    { tab: 'Jio mart(d-1)', label: 'Jio Mart' },
+    { tab: 'Jio mart(d-1)', label: 'Jio Mart', m: { total: 8, item: 8 } },
     { tab: 'Cred', label: 'Cred' },
     { tab: 'Apollo(d-1)', label: 'Apollo' },
     { tab: 'WH Smith ', label: 'WH Smith' },
     { tab: 'Firstcry', label: 'Firstcry' },
     { tab: '1MG(d-1)', label: '1MG' },
     { tab: 'smytten(d-1)', label: 'Smytten' },
-    { tab: 'Pharmeasy(d-1)', label: 'Pharmeasy' },
+    { tab: 'Pharmeasy(d-1)', label: 'Pharmeasy', m: { total: 8, item: 8 } },
     { tab: 'Meesho(d-1)', label: 'Meesho', m: { total: 6, item: 6 } },
     { tab: 'Tatacliq', label: 'Tatacliq' },
     { tab: 'POP', label: 'POP', m: { total: 6, item: 6 } },
@@ -101,4 +101,17 @@ function ddDate_(v) {
   else if (typeof v === 'string' && v !== '') d = new Date(v);
   if (!d || isNaN(d.getTime()) || d.getFullYear() < 2000) return '';
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+// helper: run once, then View > Logs -> shows column letter + header of the tabs that need checking
+function ddShowHeaders() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const out = [];
+  ['Meesho(d-1)', 'POP', 'Amazon Vendor central(d-2)', 'Cred', 'WH Smith '].forEach(t => {
+    const sh = ss.getSheetByName(t);
+    if (!sh) { out.push(t + ': SHEET NOT FOUND'); return; }
+    const h = sh.getRange(1, 1, 2, sh.getLastColumn()).getValues();
+    out.push(t + '\n' + h[0].map((v, i) => String.fromCharCode(65 + i) + '=' + v + ' [' + h[1][i] + ']').join(' | '));
+  });
+  Logger.log(out.join('\n\n'));
 }
