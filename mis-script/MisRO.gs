@@ -82,6 +82,13 @@ function roFillMonth_(tab, values, y, m) {
     keep = { f: cell.getFormula(), v: cell.getValue() };
   }
 
+  // product / SKU split must add up to the channel total, which holds the Blinkit INVOICE value:
+  // share that invoice value over Blinkit's own products / SKUs (in the ratio of its DashData sales)
+  let V = 0;
+  if (keep && (keep.f || (keep.v !== '' && keep.v !== null))) V = Number(keep.v) || 0;
+  else { const inf = roInvoiceInfo_(tab.getParent()); V = inf.err ? 0 : (inf.expected[y + '-' + m] || 0); }
+  const alloc = roAllocateBlinkit_(values, y, m, agg, V);
+
   const info = fillOneMis_(tab, { label: 'MIS as per RO', measure: RO.MEASURE }, agg, y, m);
 
   // put the Blinkit cell back
@@ -100,7 +107,24 @@ function roFillMonth_(tab, values, y, m) {
   } else if (!row) {
     note = 'WARNING: "Blinkit" row nahi mili.';
   }
-  return info + '\n' + note;
+  return info + '\n' + alloc + '\n' + note;
+}
+
+// moves the Blinkit part of agg (products / SKUs) from the DashData value to the invoice value V
+function roAllocateBlinkit_(values, y, m, agg, V) {
+  const head = values[0].map(h => String(h).trim().toLowerCase());
+  const iP = head.indexOf('portal');
+  const only = [values[0]].concat(values.slice(1).filter(r => String(r[iP]).trim().toLowerCase() === RO.SKIP_LABEL));
+  const b = misAggregate_(only, y, m, RO.MEASURE);
+  if (!(b.revenue > 0)) {
+    if (V > 0) { agg.restSku += V; agg.cats.combos = (agg.cats.combos || 0) + V; }
+    return 'Split: Blinkit DashData me nahi, invoice ' + Math.round(V) + ' Rest SKU / Combos me gaya.';
+  }
+  const k = V / b.revenue - 1;
+  Object.keys(b.skus).forEach(s => { agg.skus[s] = (agg.skus[s] || 0) + b.skus[s] * k; });
+  Object.keys(b.cats).forEach(c => { agg.cats[c] = (agg.cats[c] || 0) + b.cats[c] * k; });
+  agg.restSku += b.restSku * k;
+  return 'Split: Blinkit DashData ' + Math.round(b.revenue) + ' -> invoice ' + Math.round(V) + ' (product/SKU me usi ratio se baanta).';
 }
 
 

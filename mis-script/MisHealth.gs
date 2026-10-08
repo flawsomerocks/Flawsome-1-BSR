@@ -190,11 +190,13 @@ function hcCheckTab_(ss, tab, spec, values, months, res) {
       if (Math.abs(rv - chSum) > HC.TOL) P(tag + 'Revenue row (' + Math.round(rv) + ') channel rows ke total (' + Math.round(chSum) + ') se alag hai.');
     }
     // product + SKU consistency
+    const target = spec.kind === 'ro' ? chSum : agg.revenue;   // RO: Blinkit is the invoice value, so compare with its own Revenue
+    const tname = spec.kind === 'ro' ? 'channel total' : 'DashData';
     const catSum = catRows.reduce((s, i) => s + num(i), 0);
-    if (catRows.length === 6 && Math.abs(catSum - agg.revenue) > HC.TOL) P(tag + 'Product wise split ' + Math.round(catSum) + ', DashData ' + Math.round(agg.revenue) + '.');
+    if (catRows.length === 6 && Math.abs(catSum - target) > HC.TOL) P(tag + 'Product wise split ' + Math.round(catSum) + ', ' + tname + ' ' + Math.round(target) + '.');
     if (skuRows.length && restRow >= 0) {
       const sk = skuRows.reduce((s, i) => s + num(i), 0) + num(restRow);
-      if (Math.abs(sk - agg.revenue) > HC.TOL) P(tag + 'SKU wise split + Rest SKU ' + Math.round(sk) + ', DashData ' + Math.round(agg.revenue) + '.');
+      if (Math.abs(sk - target) > HC.TOL) P(tag + 'SKU wise split + Rest SKU ' + Math.round(sk) + ', ' + tname + ' ' + Math.round(target) + '.');
     }
     // units
     const ui = idx(MISC.UNITS);
