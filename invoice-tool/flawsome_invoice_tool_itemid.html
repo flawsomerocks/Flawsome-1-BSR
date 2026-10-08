@@ -1,0 +1,2009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flawsome Invoice Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --purple-light:#f4ebf3;
+    --purple:#8c3b89;
+    --purple-dark:#692c67;
+    --purple-darker:#311530;
+    --violet-50:#ebe9ec;
+    --violet-100:#d6d2d9;
+    --violet-300:#a79fac;
+    --violet-700:#3f2e45;
+    --violet-900:#170d1a;
+    --paper:#ffffff;
+    --ok:#2e7d4f;
+    --warn:#b5442e;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--violet-50);
+    color:var(--violet-900);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:14px;
+  }
+  .app{max-width:1180px;margin:0 auto;padding:20px 20px 60px;}
+
+  /* ---------- header ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 22px;background:var(--purple-darker);
+    border-radius:var(--radius);color:#fff;margin-bottom:18px;
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:50%;
+    background:linear-gradient(135deg,var(--purple),#c98bc6);
+    display:flex;align-items:center;justify-content:center;
+    font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:16px;
+    flex-shrink:0;
+  }
+  .brand-text .name{font-family:Georgia,'Times New Roman',serif;font-size:19px;letter-spacing:.3px;}
+  .brand-text .sub{font-size:11.5px;color:var(--violet-300);margin-top:1px;}
+  .topbar-right{font-size:12px;color:var(--violet-300);text-align:right;}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:2px solid var(--violet-100);}
+  .tab{
+    padding:10px 18px;cursor:pointer;font-weight:600;color:var(--violet-700);
+    border-bottom:2px solid transparent;margin-bottom:-2px;font-size:13.5px;
+    user-select:none;
+  }
+  .tab.active{color:var(--purple-darker);border-bottom-color:var(--purple);}
+  .tab:hover{color:var(--purple-dark);}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---------- cards ---------- */
+  .card{
+    background:var(--paper);border-radius:var(--radius);
+    padding:20px 22px;margin-bottom:16px;
+    border:1px solid var(--violet-100);
+  }
+  .card h2{margin:0 0 4px;font-size:15px;font-family:Georgia,'Times New Roman',serif;color:var(--purple-darker);}
+  .card .hint{margin:0 0 16px;font-size:12.5px;color:var(--violet-700);opacity:.8;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  @media (max-width:760px){.grid2,.grid3{grid-template-columns:1fr;}}
+
+  label{display:block;font-size:12px;font-weight:600;color:var(--violet-700);margin-bottom:5px;}
+  input,select,textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--violet-100);
+    border-radius:7px;font-size:13.5px;background:#fff;color:var(--violet-900);
+    font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--purple);outline-offset:1px;border-color:var(--purple);}
+  .field{margin-bottom:14px;}
+  textarea{resize:vertical;min-height:56px;}
+
+  .btn{
+    padding:10px 18px;border-radius:8px;border:none;cursor:pointer;
+    font-weight:700;font-size:13.5px;font-family:inherit;
+  }
+  .btn-primary{background:var(--purple);color:#fff;}
+  .btn-primary:hover{background:var(--purple-dark);}
+  .btn-ghost{background:transparent;color:var(--purple-darker);border:1px solid var(--purple);}
+  .btn-ghost:hover{background:var(--purple-light);}
+  .btn-danger{background:transparent;color:var(--warn);border:1px solid var(--warn);}
+  .btn-danger:hover{background:#fbeae6;}
+  .btn-sm{padding:6px 11px;font-size:12px;}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;}
+
+  /* ---------- items table (editor) ---------- */
+  table.editor{width:100%;border-collapse:collapse;margin-top:6px;}
+  table.editor th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
+    color:var(--violet-700);padding:6px 6px;border-bottom:1px solid var(--violet-100);
+  }
+  table.editor td{padding:5px 6px;vertical-align:top;}
+  table.editor input{padding:7px 8px;font-size:13px;}
+  .col-desc{width:34%;}
+  .col-num{width:9%;}
+  .col-amt{width:12%;}
+  .row-remove{
+    background:none;border:none;color:var(--warn);cursor:pointer;font-size:16px;
+    padding:4px 6px;line-height:1;
+  }
+
+  .checkline{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--violet-700);margin:10px 0 4px;}
+  .checkline input{width:auto;}
+
+  .totals-line{
+    display:flex;justify-content:space-between;padding:6px 0;font-size:13.5px;
+    border-top:1px solid var(--violet-100);margin-top:8px;
+  }
+  .totals-line.grand{font-weight:800;color:var(--purple-darker);font-size:15px;border-top:2px solid var(--violet-100);}
+
+  .badge{
+    display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;
+    background:var(--purple-light);color:var(--purple-darker);
+  }
+  .badge-active{background:#e4f3ea;color:var(--ok);}
+  .badge-cancelled{background:#fbeae6;color:var(--warn);}
+
+  .stats-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .stat-box{
+    flex:1;min-width:130px;background:var(--purple-light);border-radius:8px;
+    padding:10px 14px;
+  }
+  .stat-box .num{font-size:20px;font-weight:800;color:var(--purple-darker);font-family:Georgia,'Times New Roman',serif;}
+  .stat-box .lbl{font-size:11px;color:var(--violet-700);text-transform:uppercase;letter-spacing:.03em;}
+
+  /* ---------- history table ---------- */
+  table.history{width:100%;border-collapse:collapse;}
+  table.history th{
+    text-align:left;font-size:11.5px;text-transform:uppercase;color:var(--violet-700);
+    border-bottom:2px solid var(--violet-100);padding:8px 8px;
+  }
+  table.history td{padding:9px 8px;border-bottom:1px solid var(--violet-50);font-size:13px;}
+  table.history tr:hover td{background:var(--purple-light);}
+  .empty-state{text-align:center;padding:40px 10px;color:var(--violet-700);}
+  .empty-state .big{font-size:15px;font-weight:700;margin-bottom:6px;color:var(--purple-darker);}
+
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--violet-900);color:#fff;padding:11px 20px;border-radius:8px;
+    font-size:13px;opacity:0;pointer-events:none;transition:all .25s ease;z-index:999;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---------- printable invoice ---------- */
+  #invoiceWrap{display:none;}
+  #invoiceWrap.show{display:block;}
+  .inv-actions{display:flex;gap:10px;margin-bottom:14px;}
+  #invoicePaper,.invoice-paper{
+    background:#fff;border:1px solid var(--violet-100);border-radius:6px;
+    padding:26px 30px;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12.5px;
+    position:relative;
+  }
+  #invoicePaper h1,.invoice-paper h1{text-align:center;font-size:19px;margin:0 0 14px;letter-spacing:.02em;}
+  .inv-seller{margin-bottom:8px;line-height:1.5;}
+  .inv-seller b{font-size:13.5px;}
+  .inv-topgrid{display:grid;grid-template-columns:1.05fr 1fr;border:1px solid #000;margin-bottom:10px;}
+  .inv-buyer{padding:8px 10px;border-right:1px solid #000;line-height:1.55;}
+  .inv-meta table{width:100%;border-collapse:collapse;}
+  .inv-meta td{border-bottom:1px solid #000;padding:4px 8px;vertical-align:top;font-size:12px;}
+  .inv-meta td.k{width:38%;font-weight:700;border-right:1px solid #000;}
+  .inv-meta tr:last-child td{border-bottom:none;}
+  table.inv-items{width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:10px;}
+  table.inv-items th{border:1px solid #000;padding:5px 6px;font-size:11.5px;background:#fafafa;}
+  table.inv-items td{border:1px solid #000;padding:5px 6px;font-size:12px;}
+  table.inv-items td.num, table.inv-items th.num{text-align:right;}
+  .inv-words{margin:8px 0;line-height:1.6;}
+  .inv-decl{margin-top:14px;line-height:1.55;}
+  .inv-sign{margin-top:46px;}
+  .inv-footnote{margin-top:10px;font-style:italic;font-size:11px;color:#333;}
+  .inv-cancelled-stamp{
+    position:absolute;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);
+    font-size:52px;font-weight:800;color:rgba(181,68,46,0.35);border:6px solid rgba(181,68,46,0.35);
+    padding:6px 26px;letter-spacing:4px;pointer-events:none;
+  }
+
+  /* Printing uses a dedicated copy of the invoice (#printArea, a direct child of <body>) instead of
+     hiding/unhiding the app around the on-screen one. Nothing in the app's layout can swallow it. */
+  #printArea{display:none;}
+  @page{size:A4;margin:0;}   /* margin 0 also removes Chrome's date / page-title / file-path header and footer */
+  @media print{
+    html,body{background:#fff !important;margin:0;padding:0;}
+    body > *:not(#printArea){display:none !important;}
+    #printArea{display:block !important;padding:12mm 14mm;}
+    #printArea .invoice-paper{border:none !important;border-radius:0 !important;padding:0 !important;}
+    #printArea tr{page-break-inside:avoid;}
+    #printArea thead{display:table-header-group;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div id="storageBanner" style="display:none;background:#fbeae6;color:#b5442e;border:1px solid #b5442e;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-weight:600;font-size:13px;">
+    Your browser is blocking storage for this page, so invoices will NOT be remembered after you close it. Open the file in a normal (non-private) Chrome window, and download a backup after every session.
+  </div>
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">F</div>
+      <div class="brand-text">
+        <div class="name">Flawsome</div>
+        <div class="sub">Invoice Generator &middot; XLeap Care Pvt. Ltd.</div>
+      </div>
+    </div>
+    <div class="topbar-right" id="topbarCount">Saved on this device<br>for CA / monthly reporting</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="new">New Invoice</div>
+    <div class="tab" data-tab="history">History &amp; CA Report</div>
+    <div class="tab" data-tab="buyers">Saved Buyers</div>
+  </div>
+
+  <!-- ===================== DASHBOARD VIEW ===================== -->
+  <div class="view active" id="view-dashboard">
+    <div class="card">
+      <h2>Overview</h2>
+      <p class="hint">Everything at a glance — this device only.</p>
+      <div class="stats-row" id="dashStats"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="dashNewInvoiceBtn" type="button">+ New invoice</button>
+        <button class="btn btn-ghost" id="dashViewHistoryBtn" type="button">View full history</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Invoice numbering</h2>
+      <p class="hint">Already issuing invoices outside this tool? Tell it the last number you used, and "Next #" will pick up correctly from there — no need to create a dummy invoice.</p>
+      <div class="grid2">
+        <div class="field"><label>Last invoice number already used</label><input id="seedInvoiceNo" placeholder="e.g. RO25"></div>
+        <div class="field" style="display:flex;align-items:end;"><button class="btn btn-ghost" id="saveSeedBtn" type="button">Save</button></div>
+      </div>
+      <div id="seedStatus" style="font-size:12.5px;color:var(--violet-700);"></div>
+    </div>
+    <div class="card">
+      <h2>Backup &amp; restore</h2>
+      <p class="hint">This tool's data lives only in this browser. Back it up regularly, and definitely before switching devices or clearing browser data — a lost backup is the one thing this tool can't undo.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="backupBtn" type="button">Download backup (.json)</button>
+        <button class="btn btn-ghost" id="restoreBtn" type="button">Restore from backup</button>
+        <input type="file" id="restoreFileInput" accept="application/json" style="display:none;">
+      </div>
+      <div id="backupStatus" style="margin-top:8px;font-size:12.5px;color:var(--violet-700);"></div>
+    </div>
+    <div class="card">
+      <h2>This month</h2>
+      <div class="stats-row" id="dashMonthStats"></div>
+    </div>
+    <div class="card">
+      <h2>Most recent</h2>
+      <div id="dashRecentWrap"></div>
+    </div>
+  </div>
+
+  <!-- ===================== NEW INVOICE VIEW ===================== -->
+  <div class="view" id="view-new">
+
+    <div class="card" id="roUploadCard" style="border:1.5px dashed var(--purple);background:var(--purple-light);">
+      <h2>Upload Blinkit R.O. &mdash; auto-fill</h2>
+      <p class="hint">Upload the R.O. PDF Blinkit sends you. Reference no., date, buyer GSTIN, destination and every item line get filled in automatically &mdash; just check the numbers below and hit Generate.</p>
+      <input type="file" id="roFileInput" accept="application/pdf">
+      <div id="roUploadStatus" style="margin-top:8px;font-size:12.5px;color:var(--purple-darker);"></div>
+    </div>
+
+    <div class="card">
+      <h2>Seller</h2>
+      <p class="hint">This stays the same for every invoice, but you can edit it if a different entity ever needs to bill.</p>
+      <div class="grid2">
+        <div class="field"><label>Seller name</label><input id="sellerName"></div>
+        <div class="field"><label>GSTIN</label><input id="sellerGstin"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Address</label><textarea id="sellerAddress"></textarea></div>
+        <div class="field"><label>State</label><input id="sellerState"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Buyer</h2>
+      <p class="hint">Pick a saved buyer (Blinkit, Amazon, Swiggy Instamart...) or fill in a new one below &mdash; it'll offer to save.</p>
+      <div class="field">
+        <label>Saved buyer</label>
+        <select id="buyerPreset"><option value="">— Enter manually below —</option></select>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Buyer name</label><input id="buyerName" placeholder="e.g. BLINK COMMERCE PRIVATE LIMITED"></div>
+        <div class="field"><label>GSTIN</label><input id="buyerGstin"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Address</label><textarea id="buyerAddress"></textarea></div>
+        <div class="field"><label>State</label><input id="buyerState"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Invoice details</h2>
+      <div class="grid3">
+        <div class="field"><label>Invoice no.</label>
+          <div style="display:flex;gap:6px;">
+            <input id="invoiceNo" style="flex:1;">
+            <button class="btn btn-ghost btn-sm" id="suggestNoBtn" type="button">Next #</button>
+          </div>
+        </div>
+        <div class="field"><label>Invoice date</label><input id="invoiceDate" type="date"></div>
+        <div class="field"><label>Mode / terms of payment</label><input id="paymentTerms" placeholder="e.g. Net 30"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Reference label</label><input id="refLabel" placeholder="e.g. R.O. Number / PO Number"></div>
+        <div class="field"><label>Reference number</label><input id="refNumber"></div>
+        <div class="field"><label>Reference date</label><input id="refDate" type="date"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Delivery note</label><input id="deliveryNote" placeholder="optional"></div>
+        <div class="field"><label>Terms of delivery</label><input id="termsOfDelivery" placeholder="optional"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Dispatched through</label><input id="dispatchThrough" placeholder="e.g. Road / courier name"></div>
+        <div class="field"><label>Destination</label><input id="destination" placeholder="e.g. Bengaluru"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Items</h2>
+      <div class="checkline">
+        <input type="checkbox" id="taxToggle"> Add GST/tax breakup for this invoice (leave off for NIL-tax invoices)
+      </div>
+      <table class="editor" id="itemsTable">
+        <thead>
+          <tr>
+            <th class="col-desc">Description</th>
+            <th class="col-num">Item ID</th>
+            <th class="col-num">HSN/SAC</th>
+            <th class="col-num">Qty</th>
+            <th class="col-num">Unit</th>
+            <th class="col-num">Rate</th>
+            <th class="col-num tax-col" style="display:none;">IGST %</th>
+            <th class="col-num tax-col" style="display:none;">CGST %</th>
+            <th class="col-num tax-col" style="display:none;">SGST %</th>
+            <th class="col-amt">Amount</th>
+            <th style="width:26px;"></th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+      <button class="btn btn-ghost btn-sm" id="addItemBtn" type="button" style="margin-top:8px;">+ Add line item</button>
+
+      <div style="max-width:320px;margin-left:auto;margin-top:10px;">
+        <div class="totals-line"><span>Total quantity</span><b id="sumQty">0</b></div>
+        <div class="totals-line tax-col" style="display:none;"><span>Taxable value</span><b id="sumTaxable">₹0.00</b></div>
+        <div class="totals-line tax-col" style="display:none;"><span>Tax amount</span><b id="sumTax">₹0.00</b></div>
+        <div class="totals-line grand"><span>Grand total</span><b id="sumTotal">₹0.00</b></div>
+      </div>
+    </div>
+
+    <div class="btn-row" id="editModeBanner" style="display:none;background:var(--purple-light);padding:10px 14px;border-radius:8px;align-items:center;">
+      <span style="font-size:13px;font-weight:600;color:var(--purple-darker);">Editing invoice <span id="editModeInvNo"></span> — saving will update this record, not create a new one.</span>
+      <button class="btn btn-ghost btn-sm" id="discardEditBtn" type="button">Discard changes</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="generateBtn">Generate invoice</button>
+      <button class="btn btn-ghost" id="clearBtn" type="button">Clear form</button>
+    </div>
+
+    <!-- printable invoice -->
+    <div id="invoiceWrap">
+      <div class="card" style="margin-top:18px;">
+        <div class="inv-actions">
+          <button class="btn btn-primary btn-sm" id="downloadPdfBtn">Download PDF</button>
+          <button class="btn btn-ghost btn-sm" id="editInvBtn">Edit this invoice</button>
+          <button class="btn btn-ghost btn-sm" id="editAgainBtn">Back to editing</button>
+          <button class="btn btn-danger btn-sm" id="cancelInvBtn" style="display:none;">Cancel this invoice</button>
+          <button class="btn btn-ghost btn-sm" id="reactivateInvBtn" style="display:none;">Reactivate</button>
+          <span class="badge badge-active" id="savedBadge" style="display:none;">Saved to history</span>
+        </div>
+        <div id="invoicePaper"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== HISTORY VIEW ===================== -->
+  <div class="view" id="view-history">
+    <div class="card">
+      <h2>Invoice history</h2>
+      <p class="hint">Every invoice ever generated on this device, cancelled or not — nothing quietly disappears. Export a month at a time for your CA.</p>
+      <div id="historyStats" class="stats-row"></div>
+      <div class="grid3" style="align-items:end;">
+        <div class="field"><label>From</label><input type="date" id="filterFrom"></div>
+        <div class="field"><label>To</label><input type="date" id="filterTo"></div>
+        <div class="field"><label>Status</label>
+          <select id="filterStatus">
+            <option value="all">All</option>
+            <option value="active">Active only</option>
+            <option value="cancelled">Cancelled only</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-bottom:6px;">
+        <button class="btn btn-ghost" id="exportCsvBtn" type="button">Export CSV (detailed, for CA review)</button>
+        <button class="btn btn-primary" id="exportGstr1Btn" type="button">Export for GSTR-1 (B2B)</button>
+      </div>
+      <p class="hint" style="margin-top:-4px;">The GSTR-1 export uses the GST portal's official B2B invoice column format — cancelled invoices are left out of it (your CA handles those separately if already filed).</p>
+      <div id="historyTableWrap"></div>
+    </div>
+  </div>
+
+  <!-- ===================== BUYERS VIEW ===================== -->
+  <div class="view" id="view-buyers">
+    <div class="card">
+      <h2>Saved buyers</h2>
+      <p class="hint">Save each platform or client once, then reuse it from the New Invoice tab.</p>
+      <div id="buyersListWrap"></div>
+      <div class="btn-row"><button class="btn btn-ghost btn-sm" id="addBuyerBtn" type="button">+ Add buyer</button></div>
+    </div>
+  </div>
+
+  <div id="versionLabel" style="text-align:center;font-size:11.5px;color:var(--violet-700);opacity:.7;margin-top:24px;">Flawsome Invoice Generator &middot; version 2026-10-07c (Item ID saved per line)</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+/* ============ storage keys ============ */
+const K_BUYERS = 'flawsome:buyers';
+const K_INVOICES = 'flawsome:invoices';
+const K_SELLER = 'flawsome:seller';
+const K_SEED = 'flawsome:invoiceSeed';
+
+const GSTIN_STATE = {
+  '01':'Jammu and Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand',
+  '06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim',
+  '12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya',
+  '18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh',
+  '24':'Gujarat','25':'Daman and Diu','26':'Dadra and Nagar Haveli','27':'Maharashtra','28':'Andhra Pradesh (Old)',
+  '29':'Karnataka','30':'Goa','31':'Lakshadweep','32':'Kerala','33':'Tamil Nadu','34':'Puducherry',
+  '35':'Andaman and Nicobar Islands','36':'Telangana','37':'Andhra Pradesh','38':'Ladakh'
+};
+
+let buyers = [];
+let invoices = [];
+let invoiceSeed = '';
+let itemRowCount = 0;
+
+const DEFAULT_SELLER = {
+  name: 'XLEAP CARE PRIVATE LIMITED',
+  gstin: '09AAACX4730B2ZL',
+  address: '14, Booth No 169, Udyog Marg, Sector 18, Noida, Gautam Buddha Nagar 201301',
+  state: 'Uttar Pradesh'
+};
+
+/* ============ helpers ============ */
+/* Local calendar date (NOT UTC). toISOString() is UTC, so between 12:00am and 5:30am IST it
+   would give yesterday's date on invoices. */
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDateForInvoice(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T00:00:00');
+  const months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  return String(d.getDate()).padStart(2,'0')+'-'+months[d.getMonth()]+'-'+d.getFullYear();
+}
+function fmtShortDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T00:00:00');
+  const months=['Jan.','Feb.','Mar.','Apr.','May','Jun.','Jul.','Aug.','Sep.','Oct.','Nov.','Dec.'];
+  return months[d.getMonth()]+' '+d.getDate();
+}
+function money(n){
+  n = Number(n)||0;
+  return '₹' + n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function plainMoney(n){
+  n = Number(n)||0;
+  return n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function uid(){ return 'id'+Date.now()+Math.random().toString(36).slice(2,8); }
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* Defends the whole app against one malformed/corrupted invoice record (from a
+   damaged backup file, a manual storage edit, etc.) crashing history, the
+   dashboard, or CSV export. Every invoice that gets into the `invoices` array
+   is guaranteed to have this minimum shape. */
+function normalizeInvoice(inv){
+  if(!inv || typeof inv !== 'object') return null;
+  const safe = {...inv};
+  safe.id = safe.id || uid();
+  safe.status = safe.status === 'cancelled' ? 'cancelled' : 'active';
+  safe.invoiceNo = safe.invoiceNo || '';
+  safe.invoiceDate = safe.invoiceDate || todayISO();
+  safe.createdAt = safe.createdAt || new Date().toISOString();
+  safe.refLabel = safe.refLabel || 'Reference Number';
+  safe.refNumber = safe.refNumber || '';
+  safe.refDate = safe.refDate || '';
+  safe.buyer = (safe.buyer && typeof safe.buyer==='object') ? safe.buyer : {};
+  safe.buyer.name = safe.buyer.name || '(unknown buyer)';
+  safe.buyer.gstin = safe.buyer.gstin || '';
+  safe.buyer.address = safe.buyer.address || '';
+  safe.buyer.state = safe.buyer.state || '';
+  safe.seller = (safe.seller && typeof safe.seller==='object') ? safe.seller : {...DEFAULT_SELLER};
+  safe.items = (Array.isArray(safe.items) ? safe.items : []).map(it=>({
+    desc: (it&&it.desc)||'', itemId: String((it&&it.itemId)||''), hsn: (it&&it.hsn)||'', unit: (it&&it.unit)||'Nos',
+    qty: Number(it&&it.qty)||0, rate: Number(it&&it.rate)||0,
+    igst: Number(it&&it.igst)||0, cgst: Number(it&&it.cgst)||0, sgst: Number(it&&it.sgst)||0,
+    taxable: Number(it&&it.taxable)||0, taxAmt: Number(it&&it.taxAmt)||0, amount: Number(it&&it.amount)||0
+  }));
+  safe.sumQty = Number(safe.sumQty) || 0;
+  safe.sumTaxable = Number(safe.sumTaxable) || 0;
+  safe.sumTax = Number(safe.sumTax) || 0;
+  safe.sumTotal = Number(safe.sumTotal) || 0;
+  return safe;
+}
+
+/* Indian-system number to words for rupees */
+function amountInWordsINR(amount){
+  const total = Math.round((Number(amount)||0)*100);
+  const rupees = Math.floor(total/100);
+  const paise = total%100;
+  let out = numberToWordsIndian(rupees);
+  if(paise) out += ' and ' + numberToWordsIndian(paise) + ' Paise';
+  return out;
+}
+function numberToWordsIndian(num){
+  num = Math.round(Number(num)||0);
+  if(num===0) return 'Zero';
+  const ones=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
+    'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const tens=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function twoDigit(n){
+    if(n<20) return ones[n];
+    return tens[Math.floor(n/10)] + (n%10? ' '+ones[n%10] : '');
+  }
+  function threeDigit(n){
+    if(n<100) return twoDigit(n);
+    return ones[Math.floor(n/100)] + ' Hundred' + (n%100? ' '+twoDigit(n%100) : '');
+  }
+  const crore = Math.floor(num/10000000); num%=10000000;
+  const lakh = Math.floor(num/100000); num%=100000;
+  const thousand = Math.floor(num/1000); num%=1000;
+  const hundred = num;
+  let parts=[];
+  if(crore) parts.push(threeDigit(crore)+' Crore');
+  if(lakh) parts.push(threeDigit(lakh)+' Lakh');
+  if(thousand) parts.push(threeDigit(thousand)+' Thousand');
+  if(hundred) parts.push(threeDigit(hundred));
+  return parts.join(' ');
+}
+
+/* ============ persistence ============ */
+/* Works inside Claude (window.storage) and equally well as a standalone HTML
+   file shared with anyone else — falls back to the browser's own localStorage
+   so it keeps working when opened outside Claude, saving locally on whoever's
+   device opens it. */
+const hasCloudStorage = !!(window.storage && typeof window.storage.get === 'function');
+async function storageGet(key){
+  if(hasCloudStorage){
+    try{ return await window.storage.get(key); }catch(e){ return null; }
+  }
+  try{
+    const v = localStorage.getItem(key);
+    return v!==null ? {key, value:v} : null;
+  }catch(e){ return null; }
+}
+async function storageSet(key, value){
+  if(hasCloudStorage){
+    try{ return await window.storage.set(key, value); }catch(e){ return null; }
+  }
+  try{ localStorage.setItem(key, value); return {key, value}; }
+  catch(e){ return null; }
+}
+
+async function loadAll(){
+  try{
+    const b = await storageGet(K_BUYERS);
+    buyers = b ? JSON.parse(b.value) : [];
+  }catch(e){ buyers = []; }
+  try{
+    const i = await storageGet(K_INVOICES);
+    invoices = i ? JSON.parse(i.value).map(normalizeInvoice).filter(Boolean) : [];
+  }catch(e){ invoices = []; }
+  try{
+    const s = await storageGet(K_SELLER);
+    const seller = s ? JSON.parse(s.value) : DEFAULT_SELLER;
+    document.getElementById('sellerName').value = seller.name;
+    document.getElementById('sellerGstin').value = seller.gstin;
+    document.getElementById('sellerAddress').value = seller.address;
+    document.getElementById('sellerState').value = seller.state;
+  }catch(e){
+    document.getElementById('sellerName').value = DEFAULT_SELLER.name;
+    document.getElementById('sellerGstin').value = DEFAULT_SELLER.gstin;
+    document.getElementById('sellerAddress').value = DEFAULT_SELLER.address;
+    document.getElementById('sellerState').value = DEFAULT_SELLER.state;
+  }
+  try{
+    const seed = await storageGet(K_SEED);
+    invoiceSeed = seed ? JSON.parse(seed.value).value : '';
+    document.getElementById('seedInvoiceNo').value = invoiceSeed;
+  }catch(e){ invoiceSeed = ''; }
+}
+async function saveBuyers(){
+  const ok = await storageSet(K_BUYERS, JSON.stringify(buyers));
+  if(!ok) showToast('Could not save buyer (storage error)');
+}
+async function saveInvoices(){
+  const ok = await storageSet(K_INVOICES, JSON.stringify(invoices));
+  if(!ok) alert('IMPORTANT: this change could NOT be saved in the browser (storage is blocked or full).\n\nDownload the invoice PDF and a backup (Dashboard > Download backup) right now so nothing is lost.');
+  updateTopbarCount();
+  return ok;
+}
+
+/* Called at start-up: if the browser won't keep data (private window, blocked storage), say so up front
+   instead of letting someone issue a month of invoices that vanish when the tab closes. */
+async function checkStorageWorks(){
+  const probe = 'flawsome:probe';
+  const wrote = await storageSet(probe, String(Date.now()));
+  const read = wrote ? await storageGet(probe) : null;
+  if(!wrote || !read){
+    const b = document.getElementById('storageBanner');
+    b.style.display = 'block';
+  }
+}
+
+/* If the tool is open in two tabs, each holds its own copy of the list. Pull in anything the other tab saved so
+   one tab can never overwrite the other's invoices or reuse its numbers. */
+async function syncFromStorage(){
+  try{
+    const i = await storageGet(K_INVOICES);
+    if(!i) return;
+    const stored = JSON.parse(i.value).map(normalizeInvoice).filter(Boolean);
+    const have = new Set(invoices.map(x=>x.id));
+    let added = 0;
+    stored.forEach(inv=>{ if(!have.has(inv.id)){ invoices.push(inv); added++; } });
+    // status changes made in another tab (e.g. cancelled there)
+    stored.forEach(inv=>{ const mine = invoices.find(x=>x.id===inv.id); if(mine && mine.status!==inv.status && !editingInvoiceId) mine.status = inv.status; });
+    if(added) updateTopbarCount();
+  }catch(e){ /* nothing to merge */ }
+}
+window.addEventListener('storage', async (e)=>{
+  if(e.key !== K_INVOICES) return;
+  await syncFromStorage();
+  renderDashboard();
+  if(document.getElementById('view-history').classList.contains('active')) renderHistory();
+});
+function updateTopbarCount(){
+  const active = invoices.filter(i=>i.status!=='cancelled').length;
+  const cancelled = invoices.length - active;
+  document.getElementById('topbarCount').innerHTML =
+    `<b>${invoices.length}</b> invoice${invoices.length===1?'':'s'} generated<br>${active} active &middot; ${cancelled} cancelled`;
+}
+async function saveSeller(){
+  const seller = {
+    name: document.getElementById('sellerName').value.trim(),
+    gstin: document.getElementById('sellerGstin').value.trim(),
+    address: document.getElementById('sellerAddress').value.trim(),
+    state: document.getElementById('sellerState').value.trim(),
+  };
+  await storageSet(K_SELLER, JSON.stringify(seller));
+}
+
+
+/* ============ tabs ============ */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    switchToTab(tab.dataset.tab);
+  });
+});
+function switchToTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelector('.tab[data-tab="'+name+'"]').classList.add('active');
+  document.getElementById('view-'+name).classList.add('active');
+  if(name==='history') renderHistory();
+  if(name==='buyers') renderBuyers();
+  if(name==='dashboard') renderDashboard();
+}
+document.getElementById('dashNewInvoiceBtn').addEventListener('click', ()=> switchToTab('new'));
+document.getElementById('dashViewHistoryBtn').addEventListener('click', ()=> switchToTab('history'));
+
+/* ============ backup & restore ============ */
+document.getElementById('backupBtn').addEventListener('click', ()=>{
+  const seller = {
+    name: document.getElementById('sellerName').value.trim(),
+    gstin: document.getElementById('sellerGstin').value.trim(),
+    address: document.getElementById('sellerAddress').value.trim(),
+    state: document.getElementById('sellerState').value.trim(),
+  };
+  const payload = {
+    app: 'flawsome-invoice-tool',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    seller, buyers, invoices, invoiceSeed
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'flawsome-invoice-backup-'+todayISO()+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById('backupStatus').textContent = 'Backup downloaded — keep it somewhere safe (Drive, email to yourself, etc.).';
+});
+
+document.getElementById('restoreBtn').addEventListener('click', ()=>{
+  document.getElementById('restoreFileInput').click();
+});
+document.getElementById('restoreFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('backupStatus');
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(!Array.isArray(data.invoices) || !Array.isArray(data.buyers)){
+      throw new Error('This does not look like a valid backup file.');
+    }
+    const existingInvIds = new Set(invoices.map(i=>i.id));
+    const existingInvNos = new Set(invoices.map(i=>normNo(i.invoiceNo)));
+    const existingBuyerIds = new Set(buyers.map(b=>b.id));
+
+    let addedInvoices = 0, skippedInvoices = 0, addedBuyers = 0;
+    data.invoices.forEach(raw=>{
+      const inv = normalizeInvoice(raw);
+      if(!inv){ skippedInvoices++; return; }
+      if(existingInvIds.has(inv.id) || existingInvNos.has(normNo(inv.invoiceNo))){ skippedInvoices++; return; }
+      invoices.push(inv);
+      addedInvoices++;
+    });
+    data.buyers.forEach(b=>{
+      if(!b || typeof b !== 'object' || !b.id || !b.name) return;
+      if(existingBuyerIds.has(b.id)) return;
+      buyers.push(b);
+      addedBuyers++;
+    });
+
+    // keep the "last number already used outside this tool" marker, whichever of the two is higher
+    if(typeof data.invoiceSeed === 'string' && data.invoiceSeed){
+      const a = parseTrailingNumber(data.invoiceSeed), b = parseTrailingNumber(invoiceSeed);
+      if(!b || (a && a.n > b.n)){
+        invoiceSeed = data.invoiceSeed;
+        await storageSet(K_SEED, JSON.stringify({value: invoiceSeed}));
+        document.getElementById('seedInvoiceNo').value = invoiceSeed;
+      }
+    }
+
+    let sellerMsg = '';
+    if(data.seller && data.seller.name){
+      const overwriteSeller = confirm('Backup also has seller details for "'+data.seller.name+'". Use those (overwrite current seller info)?');
+      if(overwriteSeller){
+        document.getElementById('sellerName').value = data.seller.name || '';
+        document.getElementById('sellerGstin').value = data.seller.gstin || '';
+        document.getElementById('sellerAddress').value = data.seller.address || '';
+        document.getElementById('sellerState').value = data.seller.state || '';
+        await saveSeller();
+        sellerMsg = ' Seller info updated.';
+      }
+    }
+
+    await saveBuyers();
+    await saveInvoices();
+    renderBuyerPresetOptions();
+    renderDashboard();
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = `Restored: ${addedInvoices} invoice(s) and ${addedBuyers} buyer(s) added` +
+      (skippedInvoices ? `, ${skippedInvoices} invoice(s) already present were skipped.` : '.') + sellerMsg;
+    showToast('Backup restored.');
+  }catch(err){
+    console.error(err);
+    statusEl.style.color = 'var(--warn)';
+    statusEl.textContent = 'Could not restore this file: ' + err.message;
+  }
+  e.target.value = '';
+});
+
+function parseTrailingNumber(s){
+  const m = (s||'').match(/^(.*?)(\d+)(\D*)$/);
+  if(!m) return null;
+  return {prefix:m[1], n:parseInt(m[2],10), suffix:m[3], width:m[2].length};
+}
+
+function suggestNextInvoiceNo(){
+  let best = null;
+  invoices.forEach(inv=>{
+    const p = parseTrailingNumber(inv.invoiceNo);
+    if(p && (!best || p.n > best.n)) best = p;
+  });
+  if(invoiceSeed){
+    const p = parseTrailingNumber(invoiceSeed);
+    if(p && (!best || p.n > best.n)) best = p;
+  }
+  if(!best) return null;
+  return best.prefix + (best.n+1).toString().padStart(best.width,'0') + best.suffix;
+}
+
+document.getElementById('saveSeedBtn').addEventListener('click', async ()=>{
+  invoiceSeed = document.getElementById('seedInvoiceNo').value.trim();
+  await storageSet(K_SEED, JSON.stringify({value: invoiceSeed}));
+  const statusEl = document.getElementById('seedStatus');
+  if(invoiceSeed){
+    const next = suggestNextInvoiceNo();
+    statusEl.style.color = 'var(--ok)';
+    statusEl.textContent = 'Saved. Next suggested number will be '+(next || '—')+'.';
+  }else{
+    statusEl.style.color = 'var(--violet-700)';
+    statusEl.textContent = 'Cleared.';
+  }
+  renderDashboard();
+});
+
+function renderDashboard(){
+  const total = invoices.length;
+  const active = invoices.filter(i=>i.status!=='cancelled').length;
+  const cancelled = total - active;
+  const nextNo = suggestNextInvoiceNo();
+
+  document.getElementById('dashStats').innerHTML = `
+    <div class="stat-box"><div class="num">${total}</div><div class="lbl">Total invoices</div></div>
+    <div class="stat-box"><div class="num">${active}</div><div class="lbl">Active</div></div>
+    <div class="stat-box"><div class="num">${cancelled}</div><div class="lbl">Cancelled</div></div>
+    <div class="stat-box"><div class="num">${nextNo || '—'}</div><div class="lbl">Next invoice no.</div></div>
+  `;
+
+  const now = new Date();
+  const ym = todayISO().slice(0,7);
+  const monthInvoices = invoices.filter(i => (i.invoiceDate||'').slice(0,7)===ym);
+  const monthActive = monthInvoices.filter(i=>i.status!=='cancelled');
+  const monthAmount = monthActive.reduce((a,i)=>a+i.sumTotal,0);
+  document.getElementById('dashMonthStats').innerHTML = `
+    <div class="stat-box"><div class="num">${monthInvoices.length}</div><div class="lbl">Invoices this month</div></div>
+    <div class="stat-box"><div class="num">${monthActive.length}</div><div class="lbl">Active this month</div></div>
+    <div class="stat-box"><div class="num">${money(monthAmount)}</div><div class="lbl">Value this month</div></div>
+  `;
+
+  const recent = [...invoices].sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt)).slice(0,5);
+  const recentWrap = document.getElementById('dashRecentWrap');
+  if(recent.length===0){
+    recentWrap.innerHTML = `<div class="empty-state"><div class="big">No invoices yet</div>Generate your first one from the New Invoice tab.</div>`;
+  } else {
+    recentWrap.innerHTML = `
+      <table class="history">
+        <thead><tr><th>Invoice #</th><th>Date</th><th>Buyer</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          ${recent.map(inv=>`
+            <tr>
+              <td>${escapeHtml(inv.invoiceNo)}</td>
+              <td>${fmtDateForInvoice(inv.invoiceDate)}</td>
+              <td>${escapeHtml(inv.buyer.name)}</td>
+              <td>${money(inv.sumTotal)}</td>
+              <td><span class="badge ${inv.status==='cancelled'?'badge-cancelled':'badge-active'}">${inv.status==='cancelled'?'Cancelled':'Active'}</span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+}
+
+/* ============ buyer preset dropdown ============ */
+function renderBuyerPresetOptions(){
+  const sel = document.getElementById('buyerPreset');
+  sel.innerHTML = '<option value="">— Enter manually below —</option>';
+  buyers.forEach(b=>{
+    const opt = document.createElement('option');
+    opt.value = b.id;
+    opt.textContent = b.name;
+    sel.appendChild(opt);
+  });
+}
+document.getElementById('buyerPreset').addEventListener('change', (e)=>{
+  const b = buyers.find(x=>x.id===e.target.value);
+  if(!b) return;
+  document.getElementById('buyerName').value = b.name;
+  document.getElementById('buyerGstin').value = b.gstin;
+  document.getElementById('buyerAddress').value = b.address;
+  document.getElementById('buyerState').value = b.state;
+  if(b.destination) document.getElementById('destination').value = b.destination;
+  if(b.paymentTerms) document.getElementById('paymentTerms').value = b.paymentTerms;
+  if(b.refLabel) document.getElementById('refLabel').value = b.refLabel;
+});
+
+/* ============ items table ============ */
+function addItemRow(prefill){
+  prefill = prefill || {};
+  itemRowCount++;
+  const tr = document.createElement('tr');
+  tr.dataset.rowId = itemRowCount;
+  tr.innerHTML = `
+    <td><input class="it-desc" placeholder="Item description"></td>
+    <td><input class="it-itemid" placeholder="Item ID"></td>
+    <td><input class="it-hsn" placeholder="HSN"></td>
+    <td><input class="it-qty" type="number" min="0" step="1" placeholder="0"></td>
+    <td><input class="it-unit" placeholder="Nos"></td>
+    <td><input class="it-rate" type="number" min="0" step="0.01" placeholder="0.00"></td>
+    <td class="tax-col" style="display:none;"><input class="it-igst" type="number" min="0" step="0.01" placeholder="0"></td>
+    <td class="tax-col" style="display:none;"><input class="it-cgst" type="number" min="0" step="0.01" placeholder="0"></td>
+    <td class="tax-col" style="display:none;"><input class="it-sgst" type="number" min="0" step="0.01" placeholder="0"></td>
+    <td class="it-amount" style="padding-top:12px;font-weight:600;">₹0.00</td>
+    <td><button class="row-remove" type="button" title="Remove">&times;</button></td>
+  `;
+  document.getElementById('itemsBody').appendChild(tr);
+  if(prefill.desc) tr.querySelector('.it-desc').value = prefill.desc;
+  if(prefill.itemId) tr.querySelector('.it-itemid').value = prefill.itemId;
+  if(prefill.hsn) tr.querySelector('.it-hsn').value = prefill.hsn;
+  if(prefill.qty) tr.querySelector('.it-qty').value = prefill.qty;
+  if(prefill.unit) tr.querySelector('.it-unit').value = prefill.unit;
+  if(prefill.rate) tr.querySelector('.it-rate').value = prefill.rate;
+  if(prefill.igst) tr.querySelector('.it-igst').value = prefill.igst;
+  if(prefill.cgst) tr.querySelector('.it-cgst').value = prefill.cgst;
+  if(prefill.sgst) tr.querySelector('.it-sgst').value = prefill.sgst;
+
+  tr.querySelector('.row-remove').addEventListener('click', ()=>{
+    tr.remove();
+    recalcTotals();
+  });
+  tr.querySelectorAll('input').forEach(inp=>inp.addEventListener('input', recalcTotals));
+  syncTaxColsVisibility();
+}
+document.getElementById('addItemBtn').addEventListener('click', ()=>addItemRow());
+
+document.getElementById('taxToggle').addEventListener('change', ()=>{
+  syncTaxColsVisibility();
+  recalcTotals();
+});
+function syncTaxColsVisibility(){
+  const on = document.getElementById('taxToggle').checked;
+  document.querySelectorAll('.tax-col').forEach(el=> el.style.display = on ? '' : 'none');
+}
+
+function getItemRows(){
+  return Array.from(document.querySelectorAll('#itemsBody tr')).map(tr=>{
+    const qty = parseFloat(tr.querySelector('.it-qty').value)||0;
+    const rate = parseFloat(tr.querySelector('.it-rate').value)||0;
+    const igst = parseFloat(tr.querySelector('.it-igst').value)||0;
+    const cgst = parseFloat(tr.querySelector('.it-cgst').value)||0;
+    const sgst = parseFloat(tr.querySelector('.it-sgst').value)||0;
+    const taxable = qty*rate;
+    const taxPct = igst + cgst + sgst;
+    const taxAmt = taxable * taxPct/100;
+    return {
+      desc: tr.querySelector('.it-desc').value.trim(),
+      itemId: tr.querySelector('.it-itemid').value.trim(),
+      hsn: tr.querySelector('.it-hsn').value.trim(),
+      qty, unit: tr.querySelector('.it-unit').value.trim()||'Nos', rate,
+      igst, cgst, sgst, taxable, taxAmt, amount: taxable+taxAmt,
+      el: tr
+    };
+  });
+}
+
+function recalcTotals(){
+  const rows = getItemRows();
+  let sumQty=0, sumTaxable=0, sumTax=0, sumTotal=0;
+  rows.forEach(r=>{
+    sumQty += r.qty; sumTaxable += r.taxable; sumTax += r.taxAmt; sumTotal += r.amount;
+    r.el.querySelector('.it-amount').textContent = money(r.amount);
+  });
+  document.getElementById('sumQty').textContent = sumQty;
+  document.getElementById('sumTaxable').textContent = money(sumTaxable);
+  document.getElementById('sumTax').textContent = money(sumTax);
+  document.getElementById('sumTotal').textContent = money(sumTotal);
+}
+
+/* ============ invoice number suggestion ============ */
+document.getElementById('suggestNoBtn').addEventListener('click', ()=>{
+  const next = suggestNextInvoiceNo();
+  if(next){
+    document.getElementById('invoiceNo').value = next;
+  }else{
+    showToast('No previous invoices or starting number set — type the first one in, or set it on the Dashboard.');
+  }
+});
+
+/* ============ generate invoice ============ */
+let currentInvoiceId = null;
+let editingInvoiceId = null;
+
+function normNo(s){ return (s||'').trim().toLowerCase(); }
+
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+function looksLikeValidGstin(g){
+  if(!g) return true; // blank is allowed (not every buyer needs a GSTIN captured, e.g. B2C)
+  return GSTIN_RE.test(g.trim().toUpperCase());
+}
+
+function validateItemRows(rows){
+  const errors = [];
+  rows.forEach((r,idx)=>{
+    if(!r.desc) errors.push(`Line ${idx+1}: description is missing.`);
+    if(!(r.qty > 0)) errors.push(`Line ${idx+1} ("${r.desc||'untitled'}"): quantity must be greater than 0.`);
+    if(r.rate < 0) errors.push(`Line ${idx+1} ("${r.desc||'untitled'}"): rate can't be negative.`);
+  });
+  return errors;
+}
+
+let generating = false;
+document.getElementById('generateBtn').addEventListener('click', async ()=>{
+  // A fast double-click used to run this twice before the first save finished and create
+  // two invoices with the same number. Ignore clicks while one is still in progress.
+  if(generating) return;
+  generating = true;
+  try{ await generateInvoice(); }
+  catch(err){ console.error(err); alert('Something went wrong while saving this invoice: '+err.message+'\n\nNothing was lost — check History before trying again.'); }
+  finally{ generating = false; }
+});
+
+async function generateInvoice(){
+  await syncFromStorage();
+  const rows = getItemRows().filter(r=>r.desc || r.qty || r.rate);
+  if(rows.length===0){ showToast('Add at least one item first.'); return; }
+
+  const invoiceNoVal = document.getElementById('invoiceNo').value.trim();
+  const buyerNameVal = document.getElementById('buyerName').value.trim();
+  const sellerNameVal = document.getElementById('sellerName').value.trim();
+  const sellerGstinValCheck = document.getElementById('sellerGstin').value.trim();
+  const sellerAddressVal = document.getElementById('sellerAddress').value.trim();
+  const itemErrors = validateItemRows(rows);
+  const hardErrors = [];
+  if(!invoiceNoVal) hardErrors.push('Invoice number is required.');
+  else if(invoiceNoVal.length > 16) hardErrors.push('Invoice number can be at most 16 characters (the GST portal rejects longer ones).');
+  else if(!/^[A-Za-z0-9\/-]+$/.test(invoiceNoVal)) hardErrors.push('Invoice number may only contain letters, digits, "-" and "/" (the GST portal rejects anything else).');
+  if(!buyerNameVal) hardErrors.push('Buyer name is required.');
+  if(!sellerNameVal) hardErrors.push('Seller name is required.');
+  if(!sellerGstinValCheck) hardErrors.push('Seller GSTIN is required.');
+  if(!sellerAddressVal) hardErrors.push('Seller address is required.');
+  hardErrors.push(...itemErrors);
+  if(hardErrors.length){
+    alert('Please fix before generating:\n\n- ' + hardErrors.join('\n- '));
+    return;
+  }
+
+  // HARD BLOCK: no two active invoices may share an invoice number — this is the one thing GST/CA can't forgive.
+  // A CANCELLED invoice's number stays used too: under GST a number is never re-issued, a cancelled
+  // invoice keeps its place in the series.
+  const dupNo = invoices.find(inv => inv.id!==editingInvoiceId && normNo(inv.invoiceNo)===normNo(invoiceNoVal));
+  if(dupNo){
+    alert('Invoice number "'+invoiceNoVal+'" is already used by '+(dupNo.status==='cancelled'?'a CANCELLED invoice':'an active invoice')+' dated '+fmtDateForInvoice(dupNo.invoiceDate)+' for '+dupNo.buyer.name+'.\n\n'+(dupNo.status==='cancelled'?'Cancelled invoice numbers are never reused (GST rule) — use the next number instead.':'Change the invoice number before generating — duplicate numbers are not allowed.'));
+    return;
+  }
+
+  // SOFT WARNING: same RO/reference number billed twice usually means a mistake (double invoicing one shipment).
+  const refNumberVal = document.getElementById('refNumber').value.trim();
+  if(refNumberVal){
+    const dupRef = invoices.find(inv => inv.id!==editingInvoiceId && inv.status!=='cancelled' && normNo(inv.refNumber)===normNo(refNumberVal));
+    if(dupRef){
+      const proceed = confirm('Reference "'+refNumberVal+'" already has invoice '+dupRef.invoiceNo+' against it.\n\nGenerate another invoice for the same reference anyway?');
+      if(!proceed) return;
+    }
+  }
+
+  const invDateVal = document.getElementById('invoiceDate').value;
+  if(invDateVal && invDateVal > todayISO()){
+    if(!confirm('Invoice date '+fmtDateForInvoice(invDateVal)+' is in the FUTURE. Continue anyway?')) return;
+  }
+
+  // SOFT WARNING: GSTIN that doesn't match the standard 15-character pattern — usually a typo.
+  const buyerGstinVal = document.getElementById('buyerGstin').value.trim();
+  const sellerGstinVal = document.getElementById('sellerGstin').value.trim();
+  const badGstins = [];
+  if(!looksLikeValidGstin(buyerGstinVal)) badGstins.push('Buyer GSTIN "'+buyerGstinVal+'"');
+  if(!looksLikeValidGstin(sellerGstinVal)) badGstins.push('Seller GSTIN "'+sellerGstinVal+'"');
+  if(badGstins.length){
+    const proceed = confirm(badGstins.join(' and ')+" doesn't look like a standard 15-character GSTIN. Continue anyway?");
+    if(!proceed) return;
+  }
+
+  const taxOnNow = document.getElementById('taxToggle').checked;
+  if(taxOnNow && /^\d{2}/.test(buyerGstinVal) && /^\d{2}/.test(sellerGstinVal)){
+    const intra = buyerGstinVal.slice(0,2) === sellerGstinVal.slice(0,2);
+    const wrongTax = rows.some(r => intra ? r.igst>0 : (r.cgst>0 || r.sgst>0));
+    if(wrongTax){
+      const proceed = confirm(intra
+        ? 'Buyer and seller are in the SAME state, so GST should be CGST + SGST, but IGST is filled in. Continue anyway?'
+        : 'Buyer and seller are in DIFFERENT states, so GST should be IGST, but CGST/SGST is filled in. Continue anyway?');
+      if(!proceed) return;
+    }
+  }
+
+  await saveSeller();
+
+  const taxOn = document.getElementById('taxToggle').checked;
+  const data = collectFormData(rows, taxOn);
+
+  if(editingInvoiceId){
+    // update the existing record in place — same id, same createdAt, same status, everything else refreshed
+    const idx = invoices.findIndex(i=>i.id===editingInvoiceId);
+    if(idx > -1){
+      data.id = invoices[idx].id;
+      data.createdAt = invoices[idx].createdAt;
+      data.status = invoices[idx].status;
+      data.editedAt = new Date().toISOString();
+      invoices[idx] = data;
+    }
+    await saveInvoices();
+    currentInvoiceId = data.id;
+    renderInvoicePaper(data);
+    document.getElementById('invoiceWrap').classList.add('show');
+    document.getElementById('invoiceWrap').scrollIntoView({behavior:'smooth', block:'start'});
+    exitEditMode();
+    showToast('Invoice '+data.invoiceNo+' updated.');
+    return;
+  }
+
+  currentInvoiceId = data.id;
+  renderInvoicePaper(data);
+
+  document.getElementById('invoiceWrap').classList.add('show');
+  document.getElementById('invoiceWrap').scrollIntoView({behavior:'smooth', block:'start'});
+
+  // offer to save buyer if manually entered and not matching existing
+  await maybeSaveBuyer(data);
+
+  // last-moment re-check: nothing may have claimed this number while the dialogs above were open
+  if(invoices.some(i => normNo(i.invoiceNo)===normNo(data.invoiceNo))){
+    alert('Invoice number "'+data.invoiceNo+'" was just taken — nothing was saved. Pick a new number.');
+    document.getElementById('invoiceWrap').classList.remove('show');
+    return;
+  }
+  // save invoice record
+  invoices.push(data);
+  await saveInvoices();
+  document.getElementById('savedBadge').style.display = 'inline-block';
+  showToast('Invoice saved to history.');
+}
+
+/* ============ edit an existing invoice ============ */
+function loadInvoiceIntoForm(inv){
+  if(editingInvoiceId && editingInvoiceId !== inv.id){
+    if(!confirm('You have unsaved edits open for another invoice. Discard those and edit "'+inv.invoiceNo+'" instead?')) return;
+  }
+  document.getElementById('sellerName').value = inv.seller.name;
+  document.getElementById('sellerGstin').value = inv.seller.gstin;
+  document.getElementById('sellerAddress').value = inv.seller.address;
+  document.getElementById('sellerState').value = inv.seller.state;
+
+  document.getElementById('buyerPreset').value = '';
+  document.getElementById('buyerName').value = inv.buyer.name;
+  document.getElementById('buyerGstin').value = inv.buyer.gstin;
+  document.getElementById('buyerAddress').value = inv.buyer.address;
+  document.getElementById('buyerState').value = inv.buyer.state;
+
+  document.getElementById('invoiceNo').value = inv.invoiceNo;
+  document.getElementById('invoiceDate').value = inv.invoiceDate;
+  document.getElementById('paymentTerms').value = inv.paymentTerms || '';
+  document.getElementById('refLabel').value = inv.refLabel || '';
+  document.getElementById('refNumber').value = inv.refNumber || '';
+  document.getElementById('refDate').value = inv.refDate || '';
+  document.getElementById('deliveryNote').value = inv.deliveryNote || '';
+  document.getElementById('termsOfDelivery').value = inv.termsOfDelivery || '';
+  document.getElementById('dispatchThrough').value = inv.dispatchThrough || '';
+  document.getElementById('destination').value = inv.destination || '';
+
+  document.getElementById('taxToggle').checked = !!inv.taxOn;
+  syncTaxColsVisibility();
+  document.getElementById('itemsBody').innerHTML = '';
+  inv.items.forEach(it=> addItemRow({desc:it.desc, itemId:it.itemId, hsn:it.hsn, qty:it.qty, unit:it.unit, rate:it.rate, igst:it.igst, cgst:it.cgst, sgst:it.sgst}));
+  recalcTotals();
+
+  editingInvoiceId = inv.id;
+  document.getElementById('editModeBanner').style.display = 'flex';
+  document.getElementById('editModeInvNo').textContent = inv.invoiceNo;
+  document.getElementById('generateBtn').textContent = 'Save changes';
+  document.getElementById('invoiceWrap').classList.remove('show');
+
+  switchToTab('new');
+  window.scrollTo({top:0, behavior:'smooth'});
+  showToast('Editing invoice '+inv.invoiceNo+' — make your changes and Save.');
+}
+function exitEditMode(){
+  editingInvoiceId = null;
+  document.getElementById('editModeBanner').style.display = 'none';
+  document.getElementById('generateBtn').textContent = 'Generate invoice';
+}
+document.getElementById('discardEditBtn').addEventListener('click', ()=>{
+  exitEditMode();
+  document.getElementById('clearBtn').click();
+  showToast('Edit discarded.');
+});
+
+function collectFormData(rows, taxOn){
+  const sumQty = rows.reduce((a,r)=>a+r.qty,0);
+  const sumTaxable = rows.reduce((a,r)=>a+r.taxable,0);
+  const sumTax = rows.reduce((a,r)=>a+r.taxAmt,0);
+  const sumTotal = rows.reduce((a,r)=>a+r.amount,0);
+  return {
+    id: uid(),
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    invoiceNo: document.getElementById('invoiceNo').value.trim(),
+    invoiceDate: document.getElementById('invoiceDate').value || todayISO(),
+    paymentTerms: document.getElementById('paymentTerms').value.trim(),
+    refLabel: document.getElementById('refLabel').value.trim() || 'Reference Number',
+    refNumber: document.getElementById('refNumber').value.trim(),
+    refDate: document.getElementById('refDate').value,
+    deliveryNote: document.getElementById('deliveryNote').value.trim(),
+    termsOfDelivery: document.getElementById('termsOfDelivery').value.trim(),
+    dispatchThrough: document.getElementById('dispatchThrough').value.trim(),
+    destination: document.getElementById('destination').value.trim(),
+    seller: {
+      name: document.getElementById('sellerName').value.trim(),
+      gstin: document.getElementById('sellerGstin').value.trim(),
+      address: document.getElementById('sellerAddress').value.trim(),
+      state: document.getElementById('sellerState').value.trim(),
+    },
+    buyer: {
+      name: document.getElementById('buyerName').value.trim(),
+      gstin: document.getElementById('buyerGstin').value.trim(),
+      address: document.getElementById('buyerAddress').value.trim(),
+      state: document.getElementById('buyerState').value.trim(),
+    },
+    taxOn,
+    items: rows.map(r=>({desc:r.desc,itemId:r.itemId,hsn:r.hsn,qty:r.qty,unit:r.unit,rate:r.rate,igst:r.igst,cgst:r.cgst,sgst:r.sgst,taxable:r.taxable,taxAmt:r.taxAmt,amount:r.amount})),
+    sumQty, sumTaxable, sumTax, sumTotal
+  };
+}
+
+async function maybeSaveBuyer(data){
+  const exists = buyers.some(b=> b.name.toLowerCase()===data.buyer.name.toLowerCase());
+  if(exists || !data.buyer.name) return;
+  const wantsSave = confirm('Save "'+data.buyer.name+'" as a buyer preset for next time?');
+  if(wantsSave){
+    buyers.push({
+      id: uid(), name: data.buyer.name, gstin: data.buyer.gstin,
+      address: data.buyer.address, state: data.buyer.state,
+      destination: data.destination, paymentTerms: data.paymentTerms, refLabel: data.refLabel
+    });
+    await saveBuyers();
+    renderBuyerPresetOptions();
+    showToast('Buyer saved.');
+  }
+}
+
+/* ============ render printable invoice ============ */
+function buildInvoiceHtml(data){
+  const taxOn = data.taxOn;
+  const itemsRows = data.items.map((it,idx)=>`
+    <tr>
+      <td>${idx+1}</td>
+      <td>${escapeHtml(it.desc)}</td>
+      <td>${escapeHtml(it.hsn)}</td>
+      <td class="num">${it.qty} ${escapeHtml(it.unit)}</td>
+      <td class="num">${plainMoney(it.rate)}</td>
+      <td class="num">${escapeHtml(it.unit)}</td>
+      ${taxOn ? `<td class="num">${it.igst||''}</td><td class="num">${it.cgst||''}</td><td class="num">${it.sgst||''}</td>` : ''}
+      <td class="num">${plainMoney(it.amount)}</td>
+    </tr>
+  `).join('');
+
+  const taxHeaderCols = taxOn ? `<th class="num">IGST %</th><th class="num">CGST %</th><th class="num">SGST %</th>` : '';
+  const blankTaxCells = taxOn ? `<td class="num"></td><td class="num"></td><td class="num"></td>` : '';
+
+  const totalRowFixed = `
+    <tr>
+      <td colspan="3" style="text-align:right;font-weight:700;">Total</td>
+      <td class="num" style="font-weight:700;">${data.sumQty} ${escapeHtml(data.items[0]?.unit||'')}</td>
+      <td class="num"></td>
+      <td class="num"></td>
+      ${blankTaxCells}
+      <td class="num" style="font-weight:700;">${plainMoney(data.sumTotal)}</td>
+    </tr>
+  `;
+
+  const words = amountInWordsINR(data.sumTotal);
+  const taxWords = data.sumTax>0 ? 'INR '+amountInWordsINR(data.sumTax)+' Only' : 'NIL';
+  const refValue = `${escapeHtml(data.refLabel)} : ${escapeHtml(data.refNumber)}`;
+  const otherRefValue = data.refNumber
+    ? `${escapeHtml(data.refLabel)} : ${escapeHtml(data.refNumber)}${data.refDate? '<br>Dated '+fmtShortDate(data.refDate) : ''}`
+    : '';
+
+  return `
+    <h1>Tax Invoice</h1>
+    ${data.status==='cancelled' ? '<div class="inv-cancelled-stamp">CANCELLED</div>' : ''}
+    <div class="inv-seller">
+      <b>${escapeHtml(data.seller.name)}</b><br>
+      ${escapeHtml(data.seller.address)}<br>
+      GSTIN: ${escapeHtml(data.seller.gstin)}<br>
+      State Name : ${escapeHtml(data.seller.state)}
+    </div>
+    <div class="inv-topgrid">
+      <div class="inv-buyer">
+        <b>Buyer (Bill to)</b><br>
+        ${escapeHtml(data.buyer.name)}<br>
+        ${escapeHtml(data.buyer.address)}<br>
+        GSTIN: ${escapeHtml(data.buyer.gstin)}<br>
+        State Name : ${escapeHtml(data.buyer.state)}
+      </div>
+      <div class="inv-meta">
+        <table>
+          <tr><td class="k">Invoice No.</td><td>${escapeHtml(data.invoiceNo)}</td></tr>
+          <tr><td class="k">Dated</td><td>${fmtDateForInvoice(data.invoiceDate)}</td></tr>
+          <tr><td class="k">Delivery Note</td><td>${escapeHtml(data.deliveryNote)}</td></tr>
+          <tr><td class="k">Mode/Terms of Payment</td><td>${escapeHtml(data.paymentTerms)}</td></tr>
+          <tr><td class="k">Reference No. &amp; Date.</td><td>${refValue}</td></tr>
+          <tr><td class="k">Other References</td><td>${otherRefValue}</td></tr>
+          <tr><td class="k">Dispatched through</td><td>${escapeHtml(data.dispatchThrough)}</td></tr>
+          <tr><td class="k">Destination</td><td>${escapeHtml(data.destination)}</td></tr>
+          <tr><td class="k">Terms of Delivery</td><td>${escapeHtml(data.termsOfDelivery)}</td></tr>
+        </table>
+      </div>
+    </div>
+    <table class="inv-items">
+      <thead>
+        <tr>
+          <th>Sl No.</th><th>Description of Goods</th><th>HSN/SAC</th><th class="num">Quantity</th><th class="num">Rate</th><th class="num">per</th>
+          ${taxHeaderCols}
+          <th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsRows}
+        ${totalRowFixed}
+      </tbody>
+    </table>
+    <div class="inv-words">
+      <b>Amount Chargeable (in words)</b> &nbsp; E. &amp; O.E<br>
+      INR ${words} Only
+    </div>
+    <div class="inv-words"><b>Tax Amount (in words):</b> ${taxWords}</div>
+    <div class="inv-decl">
+      <b>Declaration</b><br>
+      We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+    </div>
+    <div class="inv-sign">for ${escapeHtml(data.seller.name)}</div>
+    <div style="margin-top:34px;">Authorised Signatory</div>
+    <div class="inv-footnote">This is a Computer Generated Invoice</div>
+  `;
+}
+
+function fillPrintArea(data){
+  document.getElementById('printArea').innerHTML = '<div class="invoice-paper">'+buildInvoiceHtml(data)+'</div>';
+}
+
+function renderInvoicePaper(data){
+  // Safety net: if an edit was left mid-way and the person navigates to view/download
+  // a DIFFERENT invoice, silently keeping "edit mode" active could make the next
+  // "Save changes" overwrite the wrong record. Exit edit mode the moment that happens.
+  if(editingInvoiceId && editingInvoiceId !== data.id){
+    exitEditMode();
+  }
+  document.getElementById('invoicePaper').innerHTML = buildInvoiceHtml(data);
+  fillPrintArea(data);
+  currentInvoiceId = data.id;
+  updateInvoiceActionButtons(data.status);
+}
+
+/* Uses the browser's own native print pipeline (choose "Save as PDF" as the printer) —
+   no third-party screenshot library involved, so there's no blank-canvas failure mode.
+   Works offline too, and produces a crisp, text-selectable PDF instead of a screenshot. */
+function downloadInvoiceAsPdf(data){
+  fillPrintArea(data);
+  // Chrome names the saved PDF after the page title, so make it "Tax Invoice RO26"
+  const oldTitle = document.title;
+  document.title = 'Tax Invoice ' + (data.invoiceNo || '');
+  const restore = ()=>{ document.title = oldTitle; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
+  setTimeout(restore, 60000);
+  showToast('In the print window, set Destination to "Save as PDF" and press Save.');
+  // give the browser a moment to paint the injected HTML before the print dialog opens
+  requestAnimationFrame(()=> requestAnimationFrame(()=> window.print()));
+}
+
+function updateInvoiceActionButtons(status){
+  const cancelBtn = document.getElementById('cancelInvBtn');
+  const reactivateBtn = document.getElementById('reactivateInvBtn');
+  const badge = document.getElementById('savedBadge');
+  if(status==='cancelled'){
+    cancelBtn.style.display = 'none';
+    reactivateBtn.style.display = 'inline-block';
+    badge.textContent = 'Cancelled';
+    badge.className = 'badge badge-cancelled';
+    badge.style.display = 'inline-block';
+  } else {
+    cancelBtn.style.display = 'inline-block';
+    reactivateBtn.style.display = 'none';
+    badge.textContent = 'Saved to history';
+    badge.className = 'badge badge-active';
+    badge.style.display = 'inline-block';
+  }
+}
+
+async function setInvoiceStatus(id, status){
+  const inv = invoices.find(i=>i.id===id);
+  if(!inv) return;
+  inv.status = status;
+  await saveInvoices();
+}
+
+document.getElementById('cancelInvBtn').addEventListener('click', async ()=>{
+  if(!currentInvoiceId) return;
+  const target = invoices.find(i=>i.id===currentInvoiceId);
+  if(!target){ hideInvoicePreview(); showToast('That invoice no longer exists.'); return; }
+  if(!confirm('Mark invoice '+target.invoiceNo+' as cancelled?\n\nIt stays in your history (GST needs the audit trail) with a CANCELLED stamp, stops counting toward totals, and its number is never reused.')) return;
+  await setInvoiceStatus(target.id, 'cancelled');
+  renderInvoicePaper(target);
+  showToast('Invoice marked as cancelled.');
+});
+document.getElementById('reactivateInvBtn').addEventListener('click', async ()=>{
+  const target = invoices.find(i=>i.id===currentInvoiceId);
+  if(!target){ hideInvoicePreview(); showToast('That invoice no longer exists.'); return; }
+  await setInvoiceStatus(target.id, 'active');
+  renderInvoicePaper(target);
+  showToast('Invoice reactivated.');
+});
+
+function hideInvoicePreview(){
+  document.getElementById('invoiceWrap').classList.remove('show');
+  document.getElementById('savedBadge').style.display = 'none';
+  document.getElementById('cancelInvBtn').style.display = 'none';
+  document.getElementById('reactivateInvBtn').style.display = 'none';
+  currentInvoiceId = null;
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('downloadPdfBtn').addEventListener('click', ()=>{
+  if(!currentInvoiceId){ showToast('Generate an invoice first.'); return; }
+  const inv = invoices.find(i=>i.id===currentInvoiceId);
+  if(inv) downloadInvoiceAsPdf(inv);
+});
+document.getElementById('editAgainBtn').addEventListener('click', ()=>{
+  document.getElementById('invoiceWrap').classList.remove('show');
+  document.getElementById('savedBadge').style.display = 'none';
+  document.getElementById('cancelInvBtn').style.display = 'none';
+  document.getElementById('reactivateInvBtn').style.display = 'none';
+  currentInvoiceId = null;
+});
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  document.getElementById('itemsBody').innerHTML='';
+  ['invoiceNo','paymentTerms','refLabel','refNumber','refDate','deliveryNote','termsOfDelivery','dispatchThrough','destination',
+   'buyerName','buyerGstin','buyerAddress','buyerState'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('buyerPreset').value='';
+  document.getElementById('invoiceDate').value = todayISO();
+  document.getElementById('taxToggle').checked = false;
+  syncTaxColsVisibility();
+  addItemRow();
+  document.getElementById('invoiceWrap').classList.remove('show');
+  if(editingInvoiceId) exitEditMode();
+});
+
+document.getElementById('editInvBtn').addEventListener('click', ()=>{
+  if(!currentInvoiceId){ showToast('Generate an invoice first.'); return; }
+  const inv = invoices.find(i=>i.id===currentInvoiceId);
+  if(inv) loadInvoiceIntoForm(inv);
+});
+
+/* ============ history view ============ */
+function renderHistory(){
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
+  const statusFilter = document.getElementById('filterStatus').value;
+
+  // stats always computed across everything, unaffected by filters, so the count is trustworthy
+  const totalCount = invoices.length;
+  const activeCount = invoices.filter(i=>i.status!=='cancelled').length;
+  const cancelledCount = invoices.filter(i=>i.status==='cancelled').length;
+  const activeAmount = invoices.filter(i=>i.status!=='cancelled').reduce((a,i)=>a+i.sumTotal,0);
+  document.getElementById('historyStats').innerHTML = `
+    <div class="stat-box"><div class="num">${totalCount}</div><div class="lbl">Total generated</div></div>
+    <div class="stat-box"><div class="num">${activeCount}</div><div class="lbl">Active</div></div>
+    <div class="stat-box"><div class="num">${cancelledCount}</div><div class="lbl">Cancelled</div></div>
+    <div class="stat-box"><div class="num">${money(activeAmount)}</div><div class="lbl">Active total value</div></div>
+  `;
+
+  let list = [...invoices].sort((a,b)=> new Date(b.invoiceDate)-new Date(a.invoiceDate));
+  if(from) list = list.filter(inv=> inv.invoiceDate >= from);
+  if(to) list = list.filter(inv=> inv.invoiceDate <= to);
+  if(statusFilter==='active') list = list.filter(inv=> inv.status!=='cancelled');
+  if(statusFilter==='cancelled') list = list.filter(inv=> inv.status==='cancelled');
+
+  const wrap = document.getElementById('historyTableWrap');
+  if(list.length===0){
+    wrap.innerHTML = `<div class="empty-state"><div class="big">No invoices match this filter</div>Generate one from the New Invoice tab, or widen your date/status filter.</div>`;
+    return;
+  }
+  const rows = list.map(inv=>`
+    <tr style="${inv.status==='cancelled' ? 'opacity:.6;' : ''}">
+      <td>${escapeHtml(inv.invoiceNo)}</td>
+      <td>${fmtDateForInvoice(inv.invoiceDate)}</td>
+      <td>${escapeHtml(inv.buyer.name)}</td>
+      <td>${escapeHtml(inv.refNumber)}</td>
+      <td>${inv.sumQty}</td>
+      <td>${money(inv.sumTotal)}</td>
+      <td><span class="badge ${inv.status==='cancelled'?'badge-cancelled':'badge-active'}">${inv.status==='cancelled'?'Cancelled':'Active'}</span></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-ghost btn-sm" data-reprint="${inv.id}">View</button>
+        <button class="btn btn-ghost btn-sm" data-edit="${inv.id}">Edit</button>
+        <button class="btn btn-ghost btn-sm" data-download="${inv.id}">Download</button>
+        ${inv.status==='cancelled'
+          ? `<button class="btn btn-ghost btn-sm" data-reactivate="${inv.id}">Reactivate</button>`
+          : `<button class="btn btn-danger btn-sm" data-cancel="${inv.id}">Cancel</button>`}
+        <button class="btn btn-danger btn-sm" data-delete="${inv.id}">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+  const shownTotal = list.filter(i=>i.status!=='cancelled').reduce((a,i)=>a+i.sumTotal,0);
+  wrap.innerHTML = `
+    <table class="history">
+      <thead><tr><th>Invoice #</th><th>Date</th><th>Buyer</th><th>Reference</th><th>Qty</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="totals-line grand" style="max-width:360px;margin-left:auto;"><span>Active total shown (${list.filter(i=>i.status!=='cancelled').length} invoices)</span><b>${money(shownTotal)}</b></div>
+  `;
+  wrap.querySelectorAll('[data-reprint]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const inv = invoices.find(i=>i.id===btn.dataset.reprint);
+      renderInvoicePaper(inv);
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.querySelector('.tab[data-tab="new"]').classList.add('active');
+      document.getElementById('view-new').classList.add('active');
+      document.getElementById('invoiceWrap').classList.add('show');
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+  });
+  wrap.querySelectorAll('[data-edit]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const inv = invoices.find(i=>i.id===btn.dataset.edit);
+      if(inv) loadInvoiceIntoForm(inv);
+    });
+  });
+  wrap.querySelectorAll('[data-download]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const inv = invoices.find(i=>i.id===btn.dataset.download);
+      if(inv) downloadInvoiceAsPdf(inv);
+    });
+  });
+  wrap.querySelectorAll('[data-cancel]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('Mark this invoice as cancelled? It stays visible in history for audit purposes.')) return;
+      await setInvoiceStatus(btn.dataset.cancel, 'cancelled');
+      renderHistory();
+      showToast('Invoice marked as cancelled.');
+    });
+  });
+  wrap.querySelectorAll('[data-reactivate]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      await setInvoiceStatus(btn.dataset.reactivate, 'active');
+      renderHistory();
+      showToast('Invoice reactivated.');
+    });
+  });
+  wrap.querySelectorAll('[data-delete]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const inv = invoices.find(i=>i.id===btn.dataset.delete);
+      if(!confirm('Permanently delete invoice '+(inv?inv.invoiceNo:'')+'?\n\nThis removes it completely, including from your CA export. For a real invoice that was raised, "Cancel" is usually the safer, GST-compliant choice — Delete is meant for test entries or mistakes that were never actually issued.\n\nThis cannot be undone.')) return;
+      const deletedId = btn.dataset.delete;
+      invoices = invoices.filter(i=>i.id!==deletedId);
+      await saveInvoices();
+      if(currentInvoiceId === deletedId) hideInvoicePreview();
+      if(editingInvoiceId === deletedId){ exitEditMode(); }
+      renderHistory();
+      showToast('Invoice deleted.');
+    });
+  });
+}
+document.getElementById('filterFrom').addEventListener('change', renderHistory);
+document.getElementById('filterTo').addEventListener('change', renderHistory);
+document.getElementById('filterStatus').addEventListener('change', renderHistory);
+document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
+  if(invoices.length===0){ showToast('Nothing to export yet.'); return; }
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
+  const statusFilter = document.getElementById('filterStatus').value;
+  let list = [...invoices].sort((a,b)=> new Date(a.invoiceDate)-new Date(b.invoiceDate));
+  if(from) list = list.filter(inv=> inv.invoiceDate >= from);
+  if(to) list = list.filter(inv=> inv.invoiceDate <= to);
+  if(statusFilter==='active') list = list.filter(inv=> inv.status!=='cancelled');
+  if(statusFilter==='cancelled') list = list.filter(inv=> inv.status==='cancelled');
+  const header = ['Invoice No','Date','Status','Buyer','GSTIN','Reference No','Reference Date','Qty','Taxable Value','Tax Amount','Total Amount'];
+  const lines = [header.join(',')];
+  list.forEach(inv=>{
+    lines.push([
+      csvSafe(inv.invoiceNo), inv.invoiceDate, inv.status==='cancelled'?'Cancelled':'Active', csvSafe(inv.buyer.name), csvSafe(inv.buyer.gstin),
+      csvSafe(inv.refNumber), inv.refDate||'', inv.sumQty, inv.sumTaxable.toFixed(2), inv.sumTax.toFixed(2), inv.sumTotal.toFixed(2)
+    ].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'flawsome-invoices-'+todayISO()+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('exportGstr1Btn').addEventListener('click', ()=>{
+  const active = invoices.filter(i=>i.status!=='cancelled');
+  if(active.length===0){ showToast('No active invoices to export yet.'); return; }
+  const from = document.getElementById('filterFrom').value;
+  const to = document.getElementById('filterTo').value;
+  let list = [...active].sort((a,b)=> new Date(a.invoiceDate)-new Date(b.invoiceDate));
+  if(from) list = list.filter(inv=> inv.invoiceDate >= from);
+  if(to) list = list.filter(inv=> inv.invoiceDate <= to);
+  if(list.length===0){ showToast('No active invoices in this date range.'); return; }
+
+  // Official GST portal / offline-utility column order for the B2B invoice sheet.
+  const header = [
+    'GSTIN/UIN of Recipient','Receiver Name','Invoice Number','Invoice date','Invoice Value',
+    'Place Of Supply','Reverse Charge','Applicable % of Tax Rate','Invoice Type',
+    'E-Commerce GSTIN','Rate','Taxable Value','Cess Amount'
+  ];
+  const lines = [header.join(',')];
+  // B2B sheet = buyers WITH a GSTIN. Anything without one belongs in B2C and must not be in this file.
+  const b2b = list.filter(inv => (inv.buyer.gstin||'').trim());
+  const skippedNoGstin = list.length - b2b.length;
+  if(b2b.length===0){ showToast('No invoices with a buyer GSTIN in this range — nothing for the B2B sheet.'); return; }
+  b2b.forEach(inv=>{
+    const stateCode = (inv.buyer.gstin||'').slice(0,2);
+    const stateName = GSTIN_STATE[stateCode] || inv.buyer.state || '';
+    const placeOfSupply = stateCode ? `${stateCode}-${stateName}` : stateName;
+    // The portal wants ONE ROW PER TAX RATE inside an invoice (taxable value summed per rate), with the full
+    // invoice value repeated — a single blended rate would be wrong for an invoice mixing 0% and 12/18% items.
+    const byRate = new Map();
+    (inv.items.length ? inv.items : [{igst:0,cgst:0,sgst:0,taxable:inv.sumTaxable}]).forEach(it=>{
+      const rate = (Number(it.igst)||0) + (Number(it.cgst)||0) + (Number(it.sgst)||0);
+      byRate.set(rate, (byRate.get(rate)||0) + (Number(it.taxable)||0));
+    });
+    byRate.forEach((taxable, rate)=>{
+      lines.push([
+        csvSafe(inv.buyer.gstin), csvSafe(inv.buyer.name), csvSafe(inv.invoiceNo), fmtDateForInvoice(inv.invoiceDate),
+        inv.sumTotal.toFixed(2), csvSafe(placeOfSupply), 'N', '', 'Regular',
+        '', rate, taxable.toFixed(2), '0'
+      ].join(','));
+    });
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'flawsome-gstr1-b2b-'+todayISO()+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('GSTR-1 B2B file exported — cancelled invoices excluded.'+(skippedNoGstin?(' '+skippedNoGstin+' invoice(s) without a buyer GSTIN left out (those are B2C).'):''));
+});
+function csvSafe(s){
+  s = String(s||'');
+  return /[,"\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+
+/* ============ buyers view ============ */
+function renderBuyers(){
+  const wrap = document.getElementById('buyersListWrap');
+  if(buyers.length===0){
+    wrap.innerHTML = `<div class="empty-state"><div class="big">No saved buyers yet</div>Add Blinkit, Amazon, Swiggy Instamart or any client you bill often.</div>`;
+    return;
+  }
+  wrap.innerHTML = buyers.map(b=>`
+    <div class="card" style="margin-bottom:10px;padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <b>${escapeHtml(b.name)}</b><br>
+          <span style="color:var(--violet-700);font-size:12.5px;">${escapeHtml(b.address||'')}</span><br>
+          <span style="color:var(--violet-700);font-size:12.5px;">GSTIN: ${escapeHtml(b.gstin||'—')} &middot; ${escapeHtml(b.state||'')}</span>
+        </div>
+        <button class="btn btn-danger btn-sm" data-del-buyer="${b.id}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('[data-del-buyer]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('Delete this saved buyer?')) return;
+      buyers = buyers.filter(b=>b.id!==btn.dataset.delBuyer);
+      await saveBuyers();
+      renderBuyerPresetOptions();
+      renderBuyers();
+    });
+  });
+}
+document.getElementById('addBuyerBtn').addEventListener('click', async ()=>{
+  const name = prompt('Buyer name:');
+  if(!name) return;
+  const gstin = prompt('GSTIN (optional):') || '';
+  const address = prompt('Address (optional):') || '';
+  const state = prompt('State (optional):') || '';
+  buyers.push({id:uid(), name, gstin, address, state});
+  await saveBuyers();
+  renderBuyerPresetOptions();
+  renderBuyers();
+  showToast('Buyer saved.');
+});
+
+/* ============ init ============ */
+(async function init(){
+  await loadAll();
+  renderBuyerPresetOptions();
+  document.getElementById('invoiceDate').value = todayISO();
+  document.getElementById('refDate').value = todayISO();
+  addItemRow();
+  recalcTotals();
+  updateTopbarCount();
+  renderDashboard();
+  checkStorageWorks();
+})();
+
+/* ============ RO PDF upload & auto-fill ============ */
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+
+async function extractPdfText(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let full = '';
+  for(let p=1; p<=pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    full += content.items.map(it=>it.str).join(' ') + '\n';
+  }
+  return full;
+}
+
+function parseBlinkitRO(rawText){
+  const t = rawText.replace(/\s+/g,' ').trim();
+  const result = {items:[], warnings:[]};
+
+  const roNumMatch = t.match(/R\.?O\.?\s*Number\s*:\s*(\d+)/i);
+  result.roNumber = roNumMatch ? roNumMatch[1] : '';
+
+  const dateMatch = t.match(/R\.?O\.?\s*Number\s*:\s*\d+\s*Date\s*:\s*([A-Za-z]+\.?\s*\d{1,2}),\s*(\d{4})/i);
+  if(dateMatch){
+    result.roDateIso = parseLooseDateToIso(dateMatch[1]+', '+dateMatch[2]);
+  }
+
+  const sellerGstMatch = t.match(/R\.?O\.?\s*expiry[\s\S]*?GST No\.?\s*:\s*([0-9A-Z]{15})\s*Delivered\s*To/i);
+  result.sellerGstin = sellerGstMatch ? sellerGstMatch[1] : '';
+
+  const deliveredMatch = t.match(/Delivered\s*To\s*:\s*(.*?)\s*GST No\.?\s*:\s*([0-9A-Z]{15})/i);
+  if(deliveredMatch){
+    let block = deliveredMatch[1].trim();
+    result.buyerGstin = deliveredMatch[2];
+    // buyer name is usually the leading company-name words before the address starts
+    const nameMatch = block.match(/^([A-Z0-9 .&]+(?:LIMITED|LTD|PVT LTD|PRIVATE LIMITED))\s*(.*)$/i);
+    if(nameMatch){
+      result.buyerName = nameMatch[1].trim();
+      result.buyerAddress = nameMatch[2].trim();
+    } else {
+      result.buyerName = 'BLINK COMMERCE PRIVATE LIMITED';
+      result.buyerAddress = block;
+    }
+    const stateMatch = result.buyerAddress.match(/,\s*([A-Za-z ]{3,25}),\s*\d{6}/);
+    if(stateMatch){
+      result.buyerState = stateMatch[1].trim();
+    } else if(GSTIN_STATE[result.buyerGstin.slice(0,2)]){
+      result.buyerState = GSTIN_STATE[result.buyerGstin.slice(0,2)];
+    }
+    const cityMatch = result.buyerAddress.match(/([A-Za-z]+)\s+\d{6}\s*$/);
+    result.destination = cityMatch ? cityMatch[1] : '';
+  }
+
+  // item rows: seq number, then item-code + HSN + UPC digits wrapped across however many
+  // line-broken tokens the PDF happened to split them into (this varies between ROs —
+  // sometimes "10240321", sometimes "1023910"+"1" — so we scan by consuming all
+  // consecutive digit tokens rather than assuming any single fixed split).
+  result.items = parseItemsByDigitCount(t);
+  if(result.items.length === 0){
+    result.warnings.push('Could not automatically read the item table — please add items manually.');
+  } else {
+    if(result.items.some(it => it.hasTax)){
+      result.warnings.push('This RO shows NON-ZERO tax on at least one item. The tool filled only the base rate — tick "Add GST/tax breakup" and enter the tax % yourself before generating.');
+    }
+    result.items.forEach(it=>{
+      if(Math.abs(it.qty*it.rate - it.totalAmt) > 0.5){
+        result.warnings.push(`"${it.desc.slice(0,40)}..." — qty×rate (${(it.qty*it.rate).toFixed(2)}) doesn't match RO total (${it.totalAmt.toFixed(2)}). Please double-check this line.`);
+      }
+    });
+  }
+
+  // Universal safety net: whatever the item table's format turns out to be, the RO
+  // always prints its own "Total Quantity: N" and "Net amount X" summary lines.
+  // If what we parsed doesn't add up to those, something went wrong in parsing —
+  // flag it loudly instead of silently handing over a wrong or incomplete invoice.
+  const parsedQty = result.items.reduce((a,it)=>a+(it.qty||0), 0);
+  const parsedAmount = result.items.reduce((a,it)=>a+(it.totalAmt||0), 0);
+  const roQtyMatch = t.match(/Total Quantity\s*:\s*(\d+)/i);
+  const roAmountMatch = t.match(/Net amount\s*(\d+(?:\.\d+)?)/i);
+  if(roQtyMatch){
+    const roQty = parseInt(roQtyMatch[1], 10);
+    if(roQty !== parsedQty){
+      result.warnings.push(`Quantity mismatch: this RO says Total Quantity ${roQty}, but ${parsedQty} was read from the item table. Please check every line before generating.`);
+    }
+  }
+  if(roAmountMatch){
+    const roAmount = parseFloat(roAmountMatch[1]);
+    if(Math.abs(roAmount - parsedAmount) > 0.5){
+      result.warnings.push(`Amount mismatch: this RO's Net amount is ${roAmount.toFixed(2)}, but items read from the table total ${parsedAmount.toFixed(2)}. Please check every line before generating.`);
+    }
+  }
+
+  return result;
+}
+
+/* Blinkit's catalogue names are written "Panty(Box) (4 pieces)" and "Pads (L)(Box) (1 pack (10 pieces))":
+   "(Box)" is glued to the word before it, and a space comes before the pack info. The PDF wraps lines in
+   different places on different ROs, so put the spacing back the way the name is really written. */
+function cleanItemName(raw){
+  return raw
+    .replace(/\s+/g,' ')
+    .replace(/\s+\)/g,')')
+    .replace(/\s+\(Box\)/gi,'(Box)')
+    .replace(/\(Box\)\s*\(/gi,'(Box) (')
+    .trim();
+}
+
+function parseItemsByDigitCount(t){
+  // Confine the scan to the item table itself: right after the buyer's GST No. line,
+  // up to "Total Quantity" — keeps this well away from PANs, phone numbers, GSTINs
+  // and pincodes elsewhere in the document that could otherwise look like item rows.
+  const deliveredMatch = t.match(/Delivered\s*To\s*:\s*(.*?)\s*GST No\.?\s*:\s*([0-9A-Z]{15})/i);
+  const startPos = deliveredMatch ? deliveredMatch.index + deliveredMatch[0].length : 0;
+  const endPos = t.indexOf('Total Quantity', startPos);
+  const region = endPos > -1 ? t.slice(startPos, endPos) : t.slice(startPos);
+
+  const tokens = region.trim().split(/\s+/);
+  const items = [];
+  let i = 0;
+  // A real item-code+HSN+UPC block has been 29 digits on every RO seen so far
+  // (8+8+13), but Blinkit could change a code's length at any point — so this
+  // is a MINIMUM sanity floor, not a fixed target. We consume every consecutive
+  // pure-digit token after a seq number and stop naturally at the first token
+  // that isn't pure digits (the description), whatever the total turns out to be.
+  const MIN_CODE_DIGITS = 14;
+  while(i < tokens.length){
+    if(!/^\d{1,3}$/.test(tokens[i])){ i++; continue; }
+    let j = i+1;
+    let digitsAcc = '';
+    while(j < tokens.length && /^\d+$/.test(tokens[j])){
+      digitsAcc += tokens[j];
+      j++;
+    }
+    if(digitsAcc.length < MIN_CODE_DIGITS){ i++; continue; } // not a real item start — keep scanning
+
+    // HSN for every Flawsome sanitary product seen so far starts "9619" — find it
+    // wherever it landed in the digit blob rather than assuming a fixed offset,
+    // so a future change in item-code or UPC length doesn't shift it out from under us.
+    let hsn = '';
+    const hsnIdx = digitsAcc.indexOf('9619');
+    if(hsnIdx > -1 && digitsAcc.length >= hsnIdx+8){
+      hsn = digitsAcc.slice(hsnIdx, hsnIdx+8);
+    } else if(digitsAcc.length >= 16){
+      hsn = digitsAcc.slice(8,16); // best-effort fallback guess
+    }
+
+    let descTokens = [];
+    let k = j;
+    while(k < tokens.length && !/^\d+\.\d{2}$/.test(tokens[k])){
+      descTokens.push(tokens[k]);
+      k++;
+    }
+
+    let numTokens = [];
+    let m = k;
+    while(m < tokens.length){
+      if(/^Total$/i.test(tokens[m])) break;
+      if(/^\d{1,3}$/.test(tokens[m])){
+        let acc2 = ''; let p = m+1;
+        while(p < tokens.length && /^\d+$/.test(tokens[p])){ acc2 += tokens[p]; p++; }
+        if(acc2.length >= MIN_CODE_DIGITS) break; // that's the next item starting — stop here
+      }
+      if(/^\d+\.?\d*$/.test(tokens[m])) numTokens.push(tokens[m]);
+      m++;
+    }
+
+    if(numTokens.length >= 4){
+      const last4 = numTokens.slice(-4);
+      // Everything between the item text and the last four numbers is the tax columns (IGST/CGST/SGST/CESS %, tax amount).
+      // On every RO so far they were all zero. If a future RO has real tax in there, the invoice must not silently drop it.
+      const taxTokens = numTokens.slice(0, -4).map(parseFloat);
+      const hasTax = taxTokens.some(v => v > 0);
+      items.push({
+        hasTax,
+        itemId: digitsAcc.slice(0, 8),
+        desc: cleanItemName(descTokens.join(' ')),
+        hsn,
+        rate: parseFloat(last4[0]),
+        qty: parseInt(last4[1], 10),
+        mrp: parseFloat(last4[2]),
+        totalAmt: parseFloat(last4[3]),
+        unit: 'Nos'
+      });
+    }
+    i = (m > j) ? m : j;
+  }
+  return items;
+}
+
+function parseLooseDateToIso(str){
+  // e.g. "Aug. 17, 2026" -> "2026-08-17"
+  const months = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+  const m = str.match(/([A-Za-z]{3,})\.?\s*(\d{1,2}),\s*(\d{4})/);
+  if(!m) return '';
+  const mon = months[m[1].slice(0,3).toLowerCase()];
+  if(!mon) return '';
+  return `${m[3]}-${mon}-${String(m[2]).padStart(2,'0')}`;
+}
+
+document.getElementById('roFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('roUploadStatus');
+  statusEl.textContent = 'Reading PDF...';
+  try{
+    if(!window.pdfjsLib) throw new Error('PDF reader did not load');
+    const text = await extractPdfText(file);
+    const parsed = parseBlinkitRO(text);
+
+    document.getElementById('refLabel').value = 'R.O. Number';
+    document.getElementById('refNumber').value = parsed.roNumber || '';
+    if(parsed.roDateIso) document.getElementById('refDate').value = parsed.roDateIso;
+    if(parsed.buyerName) document.getElementById('buyerName').value = parsed.buyerName;
+    if(parsed.buyerGstin) document.getElementById('buyerGstin').value = parsed.buyerGstin;
+    if(parsed.buyerAddress) document.getElementById('buyerAddress').value = parsed.buyerAddress;
+    if(parsed.buyerState) document.getElementById('buyerState').value = parsed.buyerState;
+    if(parsed.destination) document.getElementById('destination').value = parsed.destination;
+    // Fill the things this buyer always gets (payment terms, dispatch) from the saved buyer or the last invoice to them.
+    const defaults = findBuyerDefaults(parsed.buyerName, parsed.buyerGstin);
+    if(defaults.paymentTerms && !document.getElementById('paymentTerms').value.trim()) document.getElementById('paymentTerms').value = defaults.paymentTerms;
+    if(defaults.dispatchThrough && !document.getElementById('dispatchThrough').value.trim()) document.getElementById('dispatchThrough').value = defaults.dispatchThrough;
+    if(!document.getElementById('invoiceNo').value.trim()){
+      const nextNo = suggestNextInvoiceNo();
+      if(nextNo) document.getElementById('invoiceNo').value = nextNo;
+    }
+    // The RO is addressed to one specific seller entity — a mismatch means the wrong seller is on screen.
+    const sellerNow = document.getElementById('sellerGstin').value.trim();
+    if(parsed.sellerGstin && sellerNow && parsed.sellerGstin !== sellerNow){
+      parsed.warnings.push('Seller GSTIN on this RO ('+parsed.sellerGstin+') is different from the Seller section below ('+sellerNow+'). Check the seller before generating.');
+    }
+    // Same RO billed before? Say so right now, not after the invoice is already made.
+    const already = invoices.find(i => i.status!=='cancelled' && parsed.roNumber && normNo(i.refNumber)===normNo(parsed.roNumber));
+    if(already){
+      parsed.warnings.push('An invoice for this RO already exists: '+already.invoiceNo+' ('+fmtDateForInvoice(already.invoiceDate)+'). Do not bill it twice.');
+    }
+
+    if(parsed.items.length){
+      document.getElementById('itemsBody').innerHTML = '';
+      parsed.items.forEach(it=> addItemRow({desc: it.desc, itemId: it.itemId, hsn: it.hsn, qty: it.qty, unit: it.unit, rate: it.rate}));
+      recalcTotals();
+    }
+
+    let msg = `RO ${parsed.roNumber||''} se ${parsed.items.length} item(s) mil gaye — check karke Generate dabayein.`;
+    if(parsed.warnings.length){
+      msg += ' ⚠ ' + parsed.warnings.join(' ');
+      statusEl.style.color = 'var(--warn)';
+    } else {
+      statusEl.style.color = 'var(--ok)';
+    }
+    statusEl.textContent = msg;
+    showToast('RO details form mein bhar diye gaye hain.');
+  }catch(err){
+    console.error(err);
+    statusEl.style.color = 'var(--warn)';
+    statusEl.textContent = 'PDF read/parse nahi ho paya — details neeche manually bhar dein. (' + err.message + ')';
+  }finally{
+    e.target.value = ''; // so choosing the very same file again still triggers a fresh read
+  }
+});
+
+// Terms this business has always used with a buyer, so the very first invoice (before any history exists) is right too.
+const KNOWN_BUYER_TERMS = { 'blink commerce private limited': 'Net 30' };
+
+function findBuyerDefaults(name, gstin){
+  const preset = buyers.find(b => gstin && b.gstin===gstin) || buyers.find(b => normNo(b.name)===normNo(name));
+  const mine = invoices.filter(i => normNo(i.buyer && i.buyer.name)===normNo(name))
+                       .sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
+  const last = mine[0];
+  return {
+    paymentTerms: (preset && preset.paymentTerms) || (last && last.paymentTerms) || KNOWN_BUYER_TERMS[normNo(name)] || '',
+    dispatchThrough: (last && last.dispatchThrough) || ''
+  };
+}
+
+/* The invoice-date box is filled with "today" when the page opens. If this tab stays open overnight, that
+   date goes stale — refresh it when the person comes back, but only if they never changed it themselves. */
+let autoDate = todayISO();
+function refreshAutoDate(){
+  const el = document.getElementById('invoiceDate');
+  const t = todayISO();
+  if(t !== autoDate && el.value === autoDate && !editingInvoiceId){
+    el.value = t; autoDate = t;
+    showToast('Invoice date updated to today ('+fmtDateForInvoice(t)+').');
+  }
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refreshAutoDate(); });
+window.addEventListener('focus', ()=>{ refreshAutoDate(); syncFromStorage().then(()=>renderDashboard()); });
+document.getElementById('invoiceDate').addEventListener('change', ()=>{ autoDate = ''; });
+
+</script>
+</body>
+</html>
