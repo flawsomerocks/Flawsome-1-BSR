@@ -238,6 +238,35 @@
       </div>
     </div>
     <div class="card">
+      <h2>Month wise revenue <span id="sheetPill" style="display:none;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle;"></span></h2>
+      <p class="hint">Cancelled invoices are left out. These are the same numbers that go to your MIS sheet.</p>
+      <div id="dashMonthlyWrap"></div>
+    </div>
+    <div class="card">
+      <h2>Send invoices to Google Sheet (MIS)</h2>
+      <p class="hint">One time setup. After that, every invoice you make, edit, cancel or delete updates the sheet by itself, and your MIS Blinkit row fills month by month.</p>
+      <div id="sheetStatus" style="font-size:13px;font-weight:600;margin-bottom:10px;"></div>
+      <details open style="margin-bottom:10px;"><summary style="cursor:pointer;font-weight:600;">Setup steps (sirf ek baar)</summary>
+        <p class="hint">Aapke sheet ka purana Apps Script code touch nahi hoga. Naya code alag project mein jayega.</p>
+        <div class="field"><label>Step 1. Apni MIS Google Sheet ka link yahan paste karo (browser ke upar address bar se copy)</label><input id="sheetLink" placeholder="https://docs.google.com/spreadsheets/d/..."></div>
+        <div id="sheetIdOk" style="font-size:12.5px;color:var(--violet-700);margin-bottom:8px;"></div>
+        <ol style="font-size:13px;line-height:1.7;padding-left:18px;">
+          <li>Naya tab kholo: <b>script.google.com</b>, <b>New project</b> dabao. Jo code likha ho wo sab delete karke, neeche wala code paste karo aur Ctrl+S dabao.</li>
+          <li>Upar right mein <b>Deploy &gt; New deployment</b>. Type: <b>Web app</b>. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>. Deploy dabao, Allow karo (agar "unsafe" dikhe to Advanced &gt; Go to project). Phir <b>Web app URL</b> copy karo.</li>
+          <li>Wo URL neeche box mein paste karke <b>Save &amp; sync</b> dabao. Sheet mein naye tab bante dikhenge: Invoice Log, Invoice Items Log, Month Wise Revenue, History Report, aur Blinkit row bhar jayegi.</li>
+          <li>Bas. Script khud MIS as per RO tab mein Channel Wise Revenue Split ke neeche Blinkit row dhundh ke months bharti hai. Purane numbers "MIS Backup Log" tab mein save rehte hain.</li>
+        </ol>
+        <div class="field"><label>Code (ye naye project mein paste hoga)</label><textarea id="sheetScript" readonly rows="9" style="font-family:monospace;font-size:12px;"></textarea></div>
+        <button class="btn btn-ghost" id="copyScriptBtn" type="button">Copy code</button>
+        <textarea id="sheetFormula" readonly style="display:none"></textarea><button id="copyFormulaBtn" type="button" style="display:none"></button>
+      </details>
+      <div class="field"><label>Web app URL</label><input id="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="sheetSaveBtn" type="button">Save &amp; sync</button>
+        <button class="btn btn-ghost" id="sheetNowBtn" type="button">Sync now</button>
+      </div>
+    </div>
+    <div class="card">
       <h2>Invoice numbering</h2>
       <p class="hint">Already issuing invoices outside this tool? Tell it the last number you used, and "Next #" will pick up correctly from there — no need to create a dummy invoice.</p>
       <div class="grid2">
@@ -428,7 +457,7 @@
     </div>
   </div>
 
-  <div id="versionLabel" style="text-align:center;font-size:11.5px;color:var(--violet-700);opacity:.7;margin-top:24px;">Flawsome Invoice Generator &middot; version 2026-10-07c (Item ID saved per line)</div>
+  <div id="versionLabel" style="text-align:center;font-size:11.5px;color:var(--violet-700);opacity:.7;margin-top:24px;">Flawsome Invoice Generator &middot; version 2026-10-08d (Item ID saved + sent to sheet) (sheet sync + auto MIS row)</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -627,6 +656,7 @@ async function saveInvoices(){
   const ok = await storageSet(K_INVOICES, JSON.stringify(invoices));
   if(!ok) alert('IMPORTANT: this change could NOT be saved in the browser (storage is blocked or full).\n\nDownload the invoice PDF and a backup (Dashboard > Download backup) right now so nothing is lost.');
   updateTopbarCount();
+  if(ok && typeof queueSheetSync==='function') queueSheetSync();
   return ok;
 }
 
@@ -710,7 +740,8 @@ document.getElementById('backupBtn').addEventListener('click', ()=>{
     app: 'flawsome-invoice-tool',
     version: 2,
     exportedAt: new Date().toISOString(),
-    seller, buyers, invoices, invoiceSeed
+    seller, buyers, invoices, invoiceSeed,
+    sheetSync: {url: sheetCfg.url, secret: sheetCfg.secret}
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -776,6 +807,7 @@ document.getElementById('restoreFileInput').addEventListener('change', async (e)
       }
     }
 
+    if(data.sheetSync && data.sheetSync.url && !sheetCfg.url){ sheetCfg.url = data.sheetSync.url; if(data.sheetSync.secret) sheetCfg.secret = data.sheetSync.secret; await saveSheetCfg(); initSheetUi(); }
     await saveBuyers();
     await saveInvoices();
     renderBuyerPresetOptions();
@@ -850,6 +882,15 @@ function renderDashboard(){
     <div class="stat-box"><div class="num">${monthActive.length}</div><div class="lbl">Active this month</div></div>
     <div class="stat-box"><div class="num">${money(monthAmount)}</div><div class="lbl">Value this month</div></div>
   `;
+
+  const byMonth = {};
+  invoices.filter(i=>i.status!=='cancelled').forEach(i=>{
+    const k=(i.invoiceDate||'').slice(0,7); const m=byMonth[k]||(byMonth[k]={n:0,t:0,g:0,tot:0});
+    m.n++; m.t+=i.sumTaxable; m.g+=i.sumTax; m.tot+=i.sumTotal;
+  });
+  const mkeys = Object.keys(byMonth).sort().reverse();
+  const mw = document.getElementById('dashMonthlyWrap');
+  if(mw) mw.innerHTML = mkeys.length ? `<table class="history"><thead><tr><th>Month</th><th>Active invoices</th><th>Taxable value</th><th>GST</th><th>Invoice total</th></tr></thead><tbody>${mkeys.map(k=>{const m=byMonth[k]; const d=new Date(k+'-01T00:00:00'); return `<tr><td>${d.toLocaleString('en-GB',{month:'short',year:'numeric'})}</td><td>${m.n}</td><td>${money(m.t)}</td><td>${money(m.g)}</td><td>${money(m.tot)}</td></tr>`;}).join('')}</tbody></table>` : '<div class="hint">No invoices yet.</div>';
 
   const recent = [...invoices].sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt)).slice(0,5);
   const recentWrap = document.getElementById('dashRecentWrap');
@@ -1699,9 +1740,198 @@ document.getElementById('addBuyerBtn').addEventListener('click', async ()=>{
   showToast('Buyer saved.');
 });
 
+/* ============ Google Sheet sync (feeds the MIS "Channel Wise Revenue Split") ============ */
+/* After every change to the invoice list (create, edit, cancel, delete, restore) the FULL list is sent to a
+   Google Apps Script web app that rewrites two log tabs in the MIS sheet. Sending the full list each time
+   means a missed or repeated sync can never create duplicates or gaps. If the internet or Google is down,
+   invoicing carries on and the sync is retried automatically (next save, page open, or when back online). */
+const K_SHEET = 'flawsome:sheetSync';
+var sheetCfg = {sheetId:'', url:'', secret:'', lastOk:'', lastCount:0, pending:false, lastError:''};
+var sheetRunning = false, sheetDirty = false, sheetTimer = null;
+
+const SHEET_SCRIPT_TEMPLATE = ["var SECRET = '__SECRET__';", "var MIS_TAB = 'MIS as per RO';", "var HEADER_ROW = 2;", "var BLOCK_LABEL = 'channel wise revenue split';", "var ROW_LABEL = 'blinkit';", "", "function out_(o){", "  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);", "}", "function doGet(){ return out_({ok:true, msg:'Flawsome invoice sync is running'}); }", "", "function put_(ss, t){", "  var sh = ss.getSheetByName(t.name) || ss.insertSheet(t.name);", "  sh.clear();", "  var n = t.rows.length + 1;", "  (t.textCols || []).forEach(function(c){ sh.getRange(1, c + 1, n, 1).setNumberFormat('@'); });", "  sh.getRange(1, 1, n, t.header.length).setValues([t.header].concat(t.rows));", "  sh.getRange(1, 1, 1, t.header.length).setFontWeight('bold');", "  sh.setFrozenRows(1);", "}", "", "var MON_ = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};", "function keyOfHeader_(v, tz){", "  if(v instanceof Date) return Number(Utilities.formatDate(v, tz, 'yyyyMM'));", "  var m = String(v).trim().match(/^([A-Za-z]{3})[A-Za-z]*[-\\s'](\\d{2}|\\d{4})$/);", "  if(!m) return 0;", "  var mo = MON_[m[1].toLowerCase()];", "  if(!mo) return 0;", "  var y = Number(m[2]); if(y < 100) y += 2000;", "  return y * 100 + mo;", "}", "function norm_(s){ return String(s).replace(/[\\u00a0\\s]+/g, ' ').trim().toLowerCase(); }", "function findTab_(ss, name){", "  var exact = ss.getSheetByName(name);", "  if(exact) return exact;", "  var want = norm_(name), all = ss.getSheets();", "  for(var i = 0; i < all.length; i++){ if(norm_(all[i].getName()) === want) return all[i]; }", "  return null;", "}", "function colLetter_(n){", "  var s = '';", "  while(n > 0){ var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }", "  return s;", "}", "", "// Fills the Blinkit row of the MIS tab from the Invoice Log. Only months that have invoices are touched,", "// older months and the Total column are left alone. Every cell it changes is first copied to \"MIS Backup Log\".", "function updateMis_(ss, p){", "  if(!p.misFirstKey) return {ok:true, msg:'No active invoices yet, MIS not touched'};", "  var sh = findTab_(ss, MIS_TAB);", "  if(!sh) return {ok:false, msg:'Tab \"' + MIS_TAB + '\" not found, MIS not touched. Tabs in this sheet: ' + ss.getSheets().map(function(s){ return '[' + s.getName() + ']'; }).join(' ')};", "  var tz = ss.getSpreadsheetTimeZone();", "  var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();", "  var ab = sh.getRange(1, 1, lastRow, 2).getValues();", "  var blockRow = 0, i;", "  for(i = 0; i < ab.length; i++){", "    if(String(ab[i][0]).trim().toLowerCase() === BLOCK_LABEL){ blockRow = i + 1; break; }", "  }", "  if(!blockRow) return {ok:false, msg:'Could not find \"Channel Wise Revenue Split\" in column A, MIS not touched'};", "  var row = 0;", "  for(i = blockRow - 1; i < Math.min(ab.length, blockRow + 60); i++){", "    if(i > blockRow - 1 && String(ab[i][0]).trim() !== '') break;", "    if(String(ab[i][1]).trim().toLowerCase() === ROW_LABEL){ row = i + 1; break; }", "  }", "  if(!row) return {ok:false, msg:'Could not find the Blinkit row under Channel Wise Revenue Split, MIS not touched'};", "  var hdr = sh.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];", "  var forms = sh.getRange(row, 1, 1, lastCol).getFormulas()[0];", "  var vals = sh.getRange(row, 1, 1, lastCol).getValues()[0];", "  var log = [], found = {}, c;", "  for(c = 0; c < lastCol; c++){", "    var key = keyOfHeader_(hdr[c], tz);", "    if(!key || key < p.misFirstKey || key > p.misLastKey) continue;", "    if(found[key]) return {ok:false, msg:'Month ' + key + ' appears twice in the heading row, MIS not touched'};", "    found[key] = true;", "    var f = \"=SUMIFS('Invoice Log'!$I:$I,'Invoice Log'!$C:$C,\" + key + \",'Invoice Log'!$L:$L,\\\"Active\\\",'Invoice Log'!$E:$E,\\\"*BLINK*\\\")\";", "    var old = forms[c] || vals[c];", "    if(forms[c] === f) continue;", "    log.push([new Date(), colLetter_(c + 1) + row, String(forms[c] || ''), String(vals[c])]);", "    sh.getRange(row, c + 1).setFormula(f);", "  }", "  if(log.length){", "    var b = ss.getSheetByName('MIS Backup Log') || ss.insertSheet('MIS Backup Log');", "    if(b.getLastRow() === 0){ b.getRange(1, 1, 1, 4).setValues([['Changed at', 'Cell', 'Old formula', 'Old value']]).setFontWeight('bold'); }", "    b.getRange(b.getLastRow() + 1, 1, log.length, 4).setValues(log);", "  }", "  var missing = (p.monthKeys || []).filter(function(k){ return !found[k]; });", "  return {ok:true, row:row, changed:log.length, filled:Object.keys(found).length, missing:missing,", "          msg:'MIS row ' + row + ' updated for ' + Object.keys(found).length + ' month(s)' +", "              (missing.length ? '. No column found in the sheet for month(s): ' + missing.join(', ') : '')};", "}", "", "function doPost(e){", "  var lock = LockService.getScriptLock();", "  try{", "    var p = JSON.parse(e.postData.contents);", "    if(p.secret !== SECRET) return out_({ok:false, error:'Wrong secret key'});", "    lock.waitLock(25000);", "    var ss = SpreadsheetApp.openById('__SHEET_ID__');", "    var counts = {};", "    p.tabs.forEach(function(t){ put_(ss, t); counts[t.name] = t.rows.length; });", "    ss.getSheetByName('Invoice Log').getRange('N1:N2').setValues([['Last synced'], [new Date()]]);", "    SpreadsheetApp.flush();", "    var mis;", "    try{ mis = updateMis_(ss, p); }catch(err2){ mis = {ok:false, msg:'MIS update failed: ' + String(err2)}; }", "    return out_({ok:true, counts:counts, mis:mis});", "  }catch(err){", "    return out_({ok:false, error:String(err)});", "  }finally{", "    try{ lock.releaseLock(); }catch(x){}", "  }", "}"].join('\n');
+
+const SHEET_FORMULA_SUMMARY =
+"=SUMIFS('Invoice Log'!$I:$I,'Invoice Log'!$C:$C,TEXT(IF(ISNUMBER(AB$2),AB$2,DATEVALUE(\"1-\"&AB$2)),\"yyyymm\")*1,'Invoice Log'!$L:$L,\"Active\",'Invoice Log'!$E:$E,\"*BLINK*\")";
+
+function randomSecret(){
+  const a = new Uint8Array(12);
+  try{ crypto.getRandomValues(a); }catch(e){ for(let i=0;i<a.length;i++) a[i]=Math.floor(Math.random()*256); }
+  return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function loadSheetCfg(){
+  try{
+    const r = await storageGet(K_SHEET);
+    if(r) sheetCfg = Object.assign(sheetCfg, JSON.parse(r.value));
+  }catch(e){}
+  if(!sheetCfg.secret){ sheetCfg.secret = randomSecret(); await saveSheetCfg(); }
+}
+async function saveSheetCfg(){ await storageSet(K_SHEET, JSON.stringify(sheetCfg)); }
+
+function monthKeyOf(iso){ return Number(String(iso||'').slice(0,4)+String(iso||'').slice(5,7)) || 0; }
+function buildSheetPayload(){
+  const list = [...invoices].sort((a,b)=> (a.invoiceDate||'').localeCompare(b.invoiceDate||'') || new Date(a.createdAt)-new Date(b.createdAt));
+  const stat = i=> i.status==='cancelled'?'Cancelled':'Active';
+  const mtxt = iso=> new Date(iso+'T00:00:00').toLocaleString('en-GB',{month:'short',year:'numeric'});
+  const invRows = list.map(i=>[
+    i.invoiceNo, i.invoiceDate, monthKeyOf(i.invoiceDate),
+    new Date(i.invoiceDate+'T00:00:00').toLocaleString('en-GB',{month:'short',year:'2-digit'}).replace(' ','-'),
+    i.buyer.name, i.buyer.gstin||'', i.refNumber||'',
+    i.sumQty, round2(i.sumTaxable), round2(i.sumTax), round2(i.sumTotal), stat(i)
+  ]);
+  const itemRows = [];
+  list.forEach(i=> i.items.forEach(it=> itemRows.push([
+    i.invoiceNo, monthKeyOf(i.invoiceDate), stat(i), i.buyer.name,
+    it.desc, it.hsn||'', it.qty, it.rate, round2(it.taxable), it.itemId||''
+  ])));
+  // month wise revenue (active invoices only), oldest month first
+  const mm = {};
+  list.forEach(i=>{
+    const k = monthKeyOf(i.invoiceDate); const m = mm[k] || (mm[k] = {label:mtxt(i.invoiceDate), n:0, c:0, q:0, t:0, g:0, tot:0});
+    if(i.status==='cancelled'){ m.c++; return; }
+    m.n++; m.q+=i.sumQty; m.t+=i.sumTaxable; m.g+=i.sumTax; m.tot+=i.sumTotal;
+  });
+  const monthRows = Object.keys(mm).sort().map(k=>{ const m=mm[k]; return [m.label, Number(k), m.n, m.c, m.q, round2(m.t), round2(m.g), round2(m.tot)]; });
+  // full history (every invoice, cancelled too), same columns as the CSV export plus audit dates
+  const histRows = list.map(i=>[
+    i.invoiceNo, i.invoiceDate, stat(i), i.buyer.name, i.buyer.gstin||'', i.refNumber||'', i.refDate||'',
+    i.sumQty, round2(i.sumTaxable), round2(i.sumTax), round2(i.sumTotal), i.createdAt||'', i.editedAt||''
+  ]);
+  const activeKeys = [...new Set(list.filter(i=>i.status!=='cancelled').map(i=>monthKeyOf(i.invoiceDate)).filter(Boolean))].sort();
+  return {
+    secret: sheetCfg.secret,
+    misFirstKey: activeKeys.length ? activeKeys[0] : null,
+    misLastKey: activeKeys.length ? activeKeys[activeKeys.length-1] : null,
+    monthKeys: activeKeys,
+    tabs: [
+      {name:'Invoice Log', header:['Invoice No','Invoice Date','Month Key','Month','Buyer','Buyer GSTIN','RO Number','Qty','Taxable Value','GST Amount','Invoice Total','Status'], rows:invRows, textCols:[0,1,3,5,6]},
+      {name:'Invoice Items Log', header:['Invoice No','Month Key','Status','Buyer','Item','HSN','Qty','Rate','Taxable Value','Item ID'], rows:itemRows, textCols:[0,4,5,9]},
+      {name:'Month Wise Revenue', header:['Month','Month Key','Active Invoices','Cancelled Invoices','Qty','Taxable Value','GST','Invoice Total'], rows:monthRows, textCols:[0]},
+      {name:'History Report', header:['Invoice No','Date','Status','Buyer','GSTIN','Reference No','Reference Date','Qty','Taxable Value','Tax Amount','Total Amount','Created At','Last Edited'], rows:histRows, textCols:[0,1,4,5,6,11,12]}
+    ]
+  };
+}
+function round2(n){ return Math.round((Number(n)||0)*100)/100; }
+
+function setSheetStatus(){
+  const el = document.getElementById('sheetStatus');
+  if(!el) return;
+  const pill = document.getElementById('sheetPill');
+  if(!sheetCfg.url){
+    el.style.color='var(--ink-2,#555)'; el.textContent='Not connected yet. Follow the 4 steps below once.';
+    if(pill) pill.style.display='none';
+    return;
+  }
+  if(pill) pill.style.display='inline-block';
+  if(sheetCfg.pending){
+    el.style.color='#b45309';
+    el.textContent='Waiting to sync' + (sheetCfg.lastError?(' ('+sheetCfg.lastError+')'):'') + '. It retries automatically; or press Sync now.' + (sheetCfg.lastOk?(' Last good sync: '+new Date(sheetCfg.lastOk).toLocaleString('en-IN')):'');
+    if(pill){ pill.textContent='Sheet: waiting'; pill.style.background='#fef3c7'; pill.style.color='#92400e'; }
+  } else {
+    el.style.color='var(--ok,#047857)';
+    el.textContent='Synced ' + sheetCfg.lastCount + ' invoice(s) to your sheet at ' + new Date(sheetCfg.lastOk).toLocaleString('en-IN') + (sheetCfg.misMsg ? '. ' + sheetCfg.misMsg : '');
+    if(sheetCfg.misMsg && sheetCfg.misOk===false) el.style.color='#b45309';
+    if(pill){ pill.textContent='Sheet: synced'; pill.style.background='#d1fae5'; pill.style.color='#065f46'; }
+  }
+}
+
+function queueSheetSync(immediate){
+  if(!sheetCfg.url) return;
+  sheetCfg.pending = true; saveSheetCfg(); setSheetStatus();
+  sheetDirty = true;
+  clearTimeout(sheetTimer);
+  sheetTimer = setTimeout(runSheetSync, immediate?0:1200);
+}
+async function runSheetSync(){
+  if(!sheetCfg.url) return;
+  if(sheetRunning) return;             // the running pass will loop again because sheetDirty stays true
+  sheetRunning = true;
+  try{
+    while(sheetDirty){
+      sheetDirty = false;
+      await syncFromStorage();           // include anything saved from another tab first
+      const payload = buildSheetPayload();
+      const body = JSON.stringify(payload);
+      let confirmed = false, reached = false, errText = '';
+      try{
+        const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), 25000);
+        const res = await fetch(sheetCfg.url, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body, signal:ctl.signal});
+        clearTimeout(t);
+        const j = await res.json();
+        if(j && j.ok && j.counts && j.counts['Invoice Log']===payload.tabs[0].rows.length){ confirmed = true; sheetCfg.misMsg = j.mis ? ((j.mis.ok?'':'WARNING: ')+j.mis.msg) : 'old script, please update the code in Apps Script'; sheetCfg.misOk = j.mis ? !!j.mis.ok && !(j.mis.missing&&j.mis.missing.length) : false; }
+        else errText = (j && j.error) ? j.error : 'unexpected reply from sheet';
+        reached = true;
+      }catch(e){
+        // The browser may refuse to let us READ Google's reply even though the data went through. Send once more
+        // in "fire and forget" mode; if even that fails there is no connection and we retry later.
+        try{
+          await fetch(sheetCfg.url, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body});
+          reached = true; confirmed = true; errText='';
+        }catch(e2){ errText = 'no internet or Google unreachable'; }
+      }
+      if(confirmed){
+        sheetCfg.pending = sheetDirty; sheetCfg.lastOk = new Date().toISOString(); sheetCfg.lastCount = payload.tabs[0].rows.length; sheetCfg.lastError = '';
+      } else {
+        sheetCfg.pending = true; sheetCfg.lastError = errText || 'failed';
+        sheetDirty = false;                 // do not hammer; retried on next save / open / online
+      }
+      await saveSheetCfg(); setSheetStatus();
+    }
+  } finally { sheetRunning = false; }
+}
+window.addEventListener('online', ()=>{ if(sheetCfg.url && sheetCfg.pending) queueSheetSync(true); });
+
+function initSheetUi(){
+  const urlEl = document.getElementById('sheetUrl');
+  if(!urlEl) return;
+  urlEl.value = sheetCfg.url || '';
+  const idEl = document.getElementById('sheetLink');
+  idEl.value = sheetCfg.sheetId || '';
+  const refreshScript = ()=>{
+    document.getElementById('sheetScript').value = SHEET_SCRIPT_TEMPLATE.replace('__SECRET__', sheetCfg.secret).replace('__SHEET_ID__', sheetCfg.sheetId || 'PASTE-SHEET-ID-HERE');
+  };
+  idEl.addEventListener('input', async ()=>{
+    const m = idEl.value.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || (/^[a-zA-Z0-9_-]{25,}$/.test(idEl.value.trim()) ? [0, idEl.value.trim()] : null);
+    sheetCfg.sheetId = m ? m[1] : '';
+    document.getElementById('sheetIdOk').textContent = m ? 'Sheet mil gayi. Neeche code ready hai.' : 'Poora sheet link paste karo (docs.google.com/spreadsheets/d/...)';
+    await saveSheetCfg(); refreshScript();
+  });
+  refreshScript();
+  document.getElementById('sheetFormula').value = SHEET_FORMULA_SUMMARY;
+  document.getElementById('sheetSaveBtn').addEventListener('click', async ()=>{
+    const v = urlEl.value.trim();
+    if(v && !/^https:\/\/script\.google\.com\/macros\/s\/[^\s]+\/exec$/.test(v)){
+      alert('This does not look like the web app URL. It must start with https://script.google.com/macros/s/ and end with /exec');
+      return;
+    }
+    if(v && !sheetCfg.sheetId){ alert('Pehle step 1 mein apni Google Sheet ka link paste karo.'); return; }
+    sheetCfg.url = v; await saveSheetCfg(); setSheetStatus();
+    if(v) queueSheetSync(true); else { sheetCfg.pending=false; await saveSheetCfg(); setSheetStatus(); }
+  });
+  document.getElementById('sheetNowBtn').addEventListener('click', ()=>{
+    if(!sheetCfg.url){ alert('Paste the web app URL first (step 3).'); return; }
+    queueSheetSync(true);
+  });
+  document.getElementById('copyScriptBtn').addEventListener('click', ()=>copyText('sheetScript','copyScriptBtn'));
+  document.getElementById('copyFormulaBtn').addEventListener('click', ()=>copyText('sheetFormula','copyFormulaBtn'));
+  setSheetStatus();
+}
+function copyText(id, btnId){
+  const el = document.getElementById(id); el.focus(); el.select();
+  let ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){}
+  try{ if(!ok && navigator.clipboard){ navigator.clipboard.writeText(el.value); ok = true; } }catch(e){}
+  const b = document.getElementById(btnId); const old = b.textContent;
+  b.textContent = ok ? 'Copied!' : 'Select the text and press Ctrl+C';
+  setTimeout(()=>{ b.textContent = old; }, 2000);
+}
+
 /* ============ init ============ */
 (async function init(){
   await loadAll();
+  await loadSheetCfg();
+  initSheetUi();
+  if(sheetCfg.url && sheetCfg.pending) queueSheetSync(true);
   renderBuyerPresetOptions();
   document.getElementById('invoiceDate').value = todayISO();
   document.getElementById('refDate').value = todayISO();
