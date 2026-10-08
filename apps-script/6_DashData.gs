@@ -17,7 +17,7 @@ const DD = {
     { tab: 'Tatacliq', label: 'Tatacliq' },
     { tab: 'POP', label: 'POP', m: { total: 6, item: 6 } },
     { tab: 'Amazon Vendor central(d-2)', label: 'Amazon Vendor' },
-    { tab: 'Amazon Dropship(d-1)', label: 'Amazon Dropship', m: { asp: 12, total: 15, item: 15 } },
+    { tab: 'Amazon Dropship(d-1)', label: 'Amazon Dropship' },
     { tab: 'FBA AMZ', label: 'AMZ FBA', m: { total: 10, item: 10 } },
     { tab: 'Flipkart(d-1)', label: 'Flipkart' },
     { tab: 'Snapdeal(d-1)', label: 'Snapdeal' },
@@ -39,6 +39,8 @@ function buildDashData() {
     const lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
     if (lastRow < 2) { report.push(cfg.label + ': 0 rows'); return; }
     const m = Object.assign({}, DD.DEF, cfg.m || {});
+    const head = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+    const hn = i => String(head[i] === undefined ? '' : head[i]).trim();
     const data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
     let n = 0, noDate = 0, sum = 0;
     data.forEach(r => {
@@ -53,7 +55,9 @@ function buildDashData() {
       rows.push([month, date, psku, usku, ddNum_(ddGet_(r, m.qty)), ddGet_(r, m.sku),
         ddNum_(ddGet_(r, m.asp)), cfg.label, total, ddNum_(ddGet_(r, m.item))]);
     });
-    report.push(cfg.label + ': ' + n + ' rows, total ' + Math.round(sum) + ', without date ' + noDate);
+    report.push(cfg.label + ': ' + n + ' rows, total ' + Math.round(sum) + ', without date ' + noDate +
+      ' | Total=col "' + hn(m.total) + '" Item=col "' + hn(m.item) + '"' +
+      (/total/i.test(hn(m.total)) && /item/i.test(hn(m.item)) ? '' : '  <-- CHECK column'));
   });
 
   rows.sort((a, b) => (a[1] ? a[1].getTime() : 0) - (b[1] ? b[1].getTime() : 0));
